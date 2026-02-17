@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "./db";
-import { addDays, startOfDayMs, endOfDayMs } from "./week.ts";
+import { startOfDayMs, endOfDayMs } from "./week.ts";
 import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 
 type DayInfo = {
