@@ -166,7 +166,6 @@ export default function App() {
           </select>
 
           <div style={{ height: 8 }} />
-
           <button
             onClick={() => add(quickAmount)}
             style={{
