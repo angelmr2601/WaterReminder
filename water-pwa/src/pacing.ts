@@ -44,3 +44,39 @@ export function pacingStatus(totalTodayMl: number, expectedMl: number) {
   if (diff < 0) return { label: "Vas por debajo", diff };
   return { label: "Vas por delante", diff };
 }
+
+export function expectedAtMs(params: {
+  at: Date;
+  wakeHour: number;
+  sleepHour: number;
+  dailyGoalMl: number;
+}) {
+  return expectedByNowMl({
+    now: params.at,
+    wakeHour: params.wakeHour,
+    sleepHour: params.sleepHour,
+    dailyGoalMl: params.dailyGoalMl
+  });
+}
+
+export function nextHourGuidance(params: {
+  now: Date;
+  wakeHour: number;
+  sleepHour: number;
+  dailyGoalMl: number;
+  totalTodayMl: number;
+  stepMinutes?: number; // si quieres usar el intervalo de ajustes
+}) {
+  const { now, wakeHour, sleepHour, dailyGoalMl, totalTodayMl } = params;
+
+  const mins = params.stepMinutes ?? 60;
+  const at = new Date(now.getTime() + mins * 60_000);
+
+  const expectedNext = expectedAtMs({ at, wakeHour, sleepHour, dailyGoalMl });
+
+  const need = Math.max(0, expectedNext - totalTodayMl);
+  return {
+    at,
+    needMl: Math.round(need)
+  };
+}

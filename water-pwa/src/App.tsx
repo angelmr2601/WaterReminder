@@ -4,7 +4,7 @@ import { db, ensureDefaultSettings } from "./db";
 import type { Settings } from "./db";
 import { startOfDayMs, endOfDayMs } from "./time";
 import { SettingsView } from "./SettingsView";
-import { expectedByNowMl, pacingStatus } from "./pacing";
+import { expectedByNowMl, pacingStatus, nextHourGuidance } from "./pacing";
 import { StatsView } from "./StatsView";
 
 import {
@@ -17,7 +17,8 @@ import {
   TrendingUp,
   Minus,
   Home,
-  BarChart3
+  BarChart3,
+  Lightbulb
 } from "lucide-react";
 
 function fmtMl(ml: number) {
@@ -25,9 +26,8 @@ function fmtMl(ml: number) {
 }
 
 function hapticLight() {
-  navigator.vibrate?.([8, 30, 8]);
+  navigator.vibrate?.(10);
 }
-
 
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -100,13 +100,27 @@ export default function App() {
   const diffText = ps.diff === 0 ? "0 ml" : `${ps.diff > 0 ? "+" : ""}${ps.diff} ml`;
   const PaceIcon = ps.diff === 0 ? Minus : ps.diff < 0 ? TrendingDown : TrendingUp;
 
+  // Tip "bebe X antes de Y"
+  const stepMinutes = settings?.stepMinutes ?? 60;
+  const guide = nextHourGuidance({
+    now,
+    wakeHour,
+    sleepHour,
+    dailyGoalMl: goal,
+    totalTodayMl: totalToday,
+    stepMinutes
+  });
+
+  const guideTime = guide.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const showGuide = ps.diff < -150 && guide.needMl > 0; // ajusta umbral si quieres
+
   async function add(amountMl: number) {
+    hapticLight();
     await db.entries.add({ ts: Date.now(), amountMl, type: "water" });
   }
 
   async function remove(id?: number) {
     if (!id) return;
-    hapticLight();
     await db.entries.delete(id);
   }
 
@@ -239,15 +253,7 @@ export default function App() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    opacity: 0.65,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6
-                  }}
-                >
+                <div style={{ fontSize: 13, opacity: 0.65, display: "flex", alignItems: "center", gap: 6 }}>
                   <Droplets size={16} />
                   Hoy
                 </div>
@@ -279,6 +285,29 @@ export default function App() {
                     <strong style={{ fontWeight: 800 }}>{ps.label}</strong> ({diffText})
                   </span>
                 </div>
+
+                {showGuide && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: "10px 12px",
+                      borderRadius: 14,
+                      border: "1px solid #eee",
+                      background: "#fafafa",
+                      fontSize: 13,
+                      display: "flex",
+                      gap: 10,
+                      alignItems: "flex-start"
+                    }}
+                  >
+                    <Lightbulb size={18} style={{ marginTop: 1 }} />
+                    <div>
+                      Para ir en ritmo, bebe{" "}
+                      <strong>{guide.needMl} ml</strong> antes de{" "}
+                      <strong>{guideTime}</strong>.
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div style={{ textAlign: "right" }}>
