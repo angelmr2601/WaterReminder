@@ -25,10 +25,6 @@ function fmtMl(ml: number) {
   return `${ml} ml`;
 }
 
-function hapticLight() {
-  navigator.vibrate?.(10);
-}
-
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [quickAmount, setQuickAmount] = useState<number>(250);
@@ -114,8 +110,11 @@ export default function App() {
   const guideTime = guide.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const showGuide = ps.diff < -150 && guide.needMl > 0; // ajusta umbral si quieres
 
+  const [pressed, setPressed] = useState(false);
+
   async function add(amountMl: number) {
-    hapticLight();
+    setPressed(true);
+    window.setTimeout(() => setPressed(false), 120);
     await db.entries.add({ ts: Date.now(), amountMl, type: "water" });
   }
 
@@ -334,18 +333,7 @@ export default function App() {
 
                 <button
                   onClick={() => add(quickAmount)}
-                  style={{
-                    padding: "12px 16px",
-                    fontSize: 16,
-                    borderRadius: 14,
-                    border: "none",
-                    background: "#111",
-                    color: "white",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    fontWeight: 800
-                  }}
+                  className={`btn btnPrimary addBtn ${pressed ? "addBtn--tap" : ""}`}
                   aria-label={`Añadir ${quickAmount} ml`}
                 >
                   <Droplets size={18} />

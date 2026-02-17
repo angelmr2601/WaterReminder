@@ -126,3 +126,23 @@ button, select, input{
   font-weight: 800;
   letter-spacing: -0.2px;
 }
+
+.addBtn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap: 10px;
+  transform: translateZ(0);
+  will-change: transform, filter;
+  transition: transform 140ms ease, filter 140ms ease;
+}
+
+.addBtn--tap{
+  transform: scale(0.97);
+  filter: drop-shadow(0 10px 22px rgba(78,161,255,0.35));
+}
+
+/* Extra: feedback táctil visual cuando mantienes pulsado */
+.addBtn:active{
+  transform: scale(0.965);
+}
