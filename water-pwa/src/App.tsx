@@ -6,6 +6,7 @@ import { startOfDayMs, endOfDayMs } from "./time";
 import { SettingsView } from "./SettingsView";
 import { expectedByNowMl, pacingStatus } from "./pacing";
 import { WeeklyChart } from "./WeeklyChart";
+import { WavesHero } from "./Illustrations";
 
 function fmtMl(ml: number) {
   return `${ml} ml`;
@@ -45,7 +46,10 @@ export default function App() {
       const today = new Date();
       const from = startOfDayMs(today);
       const to = endOfDayMs(today);
-      const rows = await db.entries.where("ts").between(from, to, true, true).toArray();
+      const rows = await db.entries
+        .where("ts")
+        .between(from, to, true, true)
+        .toArray();
       return rows.sort((a, b) => b.ts - a.ts);
     }, []) ?? [];
 
@@ -90,7 +94,6 @@ export default function App() {
     await db.entries.delete(id);
   }
 
-
   return (
     <div
       style={{
@@ -98,13 +101,40 @@ export default function App() {
         margin: "0 auto",
         padding: 16,
         fontFamily: "system-ui",
-        background: "#fafafa",
+        background: "#0b0f14",
+        color: "rgba(255,255,255,0.92)",
         minHeight: "100vh"
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1 style={{ margin: 0 }}>Hydro</h1>
-        <button onClick={() => setShowSettings((v) => !v)}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center"
+        }}
+      >
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 40,
+            letterSpacing: -0.8,
+            fontWeight: 800
+          }}
+        >
+          Hydro
+        </h1>
+
+        <button
+          onClick={() => setShowSettings((v) => !v)}
+          style={{
+            padding: "10px 14px",
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.14)",
+            background: "rgba(255,255,255,0.06)",
+            color: "#4ea1ff",
+            fontWeight: 700
+          }}
+        >
           {showSettings ? "Cerrar" : "Ajustes"}
         </button>
       </div>
@@ -115,103 +145,155 @@ export default function App() {
         </div>
       )}
 
+      {/* Card principal */}
       <div
         style={{
-          marginTop: 12,
+          marginTop: 14,
           padding: 16,
-          borderRadius: 16,
-          background: "white",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.05)"
+          borderRadius: 18,
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.10)",
+          boxShadow: "0 14px 30px rgba(0,0,0,0.35)",
+          overflow: "hidden"
         }}
       >
-        <div style={{ fontSize: 14, opacity: 0.6 }}>Hoy</div>
-
-        <div style={{ fontSize: 32, fontWeight: 700 }}>{fmtMl(totalToday)}</div>
-
-        <div style={{ fontSize: 14, opacity: 0.7 }}>
-          Objetivo: {fmtMl(goal)} · {pct}%
+        {/* Ilustración / Hero */}
+        <div style={{ margin: "-16px -16px 14px", borderRadius: 18, overflow: "hidden" }}>
+          <WavesHero progress={goal > 0 ? totalToday / goal : 0} />
         </div>
 
-        <div style={{ fontSize: 14, marginTop: 6 }}>
-          A esta hora: {fmtMl(expected)} · <strong>{ps.label}</strong> ({diffText})
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 14, opacity: 0.75 }}>Hoy</div>
+            <div style={{ fontSize: 34, fontWeight: 800 }}>{fmtMl(totalToday)}</div>
+            <div style={{ fontSize: 14, opacity: 0.75 }}>
+              Objetivo: {fmtMl(goal)} · {pct}%
+            </div>
+            <div style={{ fontSize: 14, marginTop: 8, opacity: 0.92 }}>
+              A esta hora: {fmtMl(expected)} · <strong>{ps.label}</strong> ({diffText})
+            </div>
+          </div>
+
+          <div style={{ textAlign: "right" }}>
+            <select
+              value={quickAmount}
+              onChange={(e) => setQuickAmount(Number(e.target.value))}
+              style={{
+                borderRadius: 999,
+                padding: "8px 10px",
+                border: "1px solid rgba(255,255,255,0.14)",
+                background: "rgba(0,0,0,0.25)"
+              }}
+            >
+              {quickList.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+
+            <div style={{ height: 8 }} />
+
+            <button
+              onClick={() => add(quickAmount)}
+              style={{
+                padding: "12px 18px",
+                fontSize: 16,
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,0.16)",
+                background: "rgba(255,255,255,0.10)",
+                color: "#4ea1ff",
+                fontWeight: 800
+              }}
+            >
+              + {quickAmount} ml
+            </button>
+          </div>
         </div>
 
+        {/* Barra de progreso */}
         <div
           style={{
-            marginTop: 12,
+            marginTop: 14,
             width: "100%",
             height: 12,
-            background: "#eee",
-            borderRadius: 999
+            background: "rgba(255,255,255,0.08)",
+            borderRadius: 999,
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.10)"
           }}
         >
           <div
             style={{
               width: `${pct}%`,
               height: "100%",
-              background: pct >= 100 ? "#2ecc71" : ps.diff < -150 ? "#e74c3c" : "#3498db",
+              background:
+                pct >= 100
+                  ? "rgba(53,208,127,0.95)"
+                  : ps.diff < -150
+                  ? "rgba(255,91,110,0.95)"
+                  : "rgba(78,161,255,0.95)",
               borderRadius: 999,
-              transition: "width 0.3s ease"
+              transition: "width 0.35s ease"
             }}
           />
         </div>
-
-        <div style={{ marginTop: 16, textAlign: "right" }}>
-          <select value={quickAmount} onChange={(e) => setQuickAmount(Number(e.target.value))}>
-            {quickList.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-
-          <div style={{ height: 8 }} />
-          <button
-            onClick={() => add(quickAmount)}
-            style={{
-              padding: "12px 18px",
-              fontSize: 16,
-              borderRadius: 12,
-              border: "none",
-              background: "#111",
-              color: "white"
-            }}
-          >
-            + {quickAmount} ml
-          </button>
-        </div>
       </div>
 
+      {/* Semana */}
       <div style={{ marginTop: 16 }}>
         <WeeklyChart goalMl={goal} />
       </div>
 
-      <h2 style={{ marginTop: 24 }}>Registros de hoy</h2>
+      {/* Lista */}
+      <h2 style={{ marginTop: 22, marginBottom: 10, fontSize: 22, fontWeight: 800 }}>
+        Registros de hoy
+      </h2>
 
       {todayEntries.length === 0 ? (
-        <div style={{ opacity: 0.6 }}>Aún no has registrado nada.</div>
+        <div style={{ opacity: 0.7 }}>Aún no has registrado nada.</div>
       ) : (
-        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+        <div
+          style={{
+            borderRadius: 18,
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.10)",
+            boxShadow: "0 14px 30px rgba(0,0,0,0.25)",
+            overflow: "hidden"
+          }}
+        >
           {todayEntries.map((e) => (
-            <li
+            <div
               key={e.id}
               style={{
                 display: "flex",
                 justifyContent: "space-between",
-                padding: "10px 0",
-                borderBottom: "1px solid #eee"
+                padding: "12px 14px",
+                borderBottom: "1px solid rgba(255,255,255,0.08)"
               }}
             >
               <div>
-                <div style={{ fontWeight: 600 }}>{fmtMl(e.amountMl)}</div>
-                <div style={{ fontSize: 12, opacity: 0.6 }}>
+                <div style={{ fontWeight: 800 }}>{fmtMl(e.amountMl)}</div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>
                   {new Date(e.ts).toLocaleTimeString()}
                 </div>
               </div>
-              <button onClick={() => remove(e.id)}>Borrar</button>
-            </li>
+
+              <button
+                onClick={() => remove(e.id)}
+                style={{
+                  borderRadius: 12,
+                  padding: "8px 10px",
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  background: "rgba(255,255,255,0.06)",
+                  opacity: 0.9
+                }}
+              >
+                Borrar
+              </button>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

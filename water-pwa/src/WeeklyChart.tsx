@@ -65,7 +65,7 @@ export function WeeklyChart({ goalMl }: { goalMl: number }) {
 
             <div style={{ display: "flex", gap: 10, alignItems: "flex-end", height: 140 }}>
                 {stats.map((s) => {
-                    const h = Math.round((s.totalMl / maxMl) * 120);
+                    const h = Math.max(4, Math.round((s.totalMl / maxMl) * 120));
                     const hitGoal = s.totalMl >= goalMl;
 
                     return (
