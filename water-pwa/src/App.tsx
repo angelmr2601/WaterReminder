@@ -5,7 +5,7 @@ import type { Settings } from "./db";
 import { startOfDayMs, endOfDayMs } from "./time";
 import { SettingsView } from "./SettingsView";
 import { expectedByNowMl, pacingStatus } from "./pacing";
-import { WeeklyChart } from "./WeeklyChart";
+import { StatsView } from "./StatsView";
 
 import {
   Settings as SettingsIcon,
@@ -15,7 +15,9 @@ import {
   Clock,
   TrendingDown,
   TrendingUp,
-  Minus
+  Minus,
+  Home,
+  BarChart3
 } from "lucide-react";
 
 function fmtMl(ml: number) {
@@ -26,6 +28,7 @@ export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [quickAmount, setQuickAmount] = useState<number>(250);
   const [showSettings, setShowSettings] = useState(false);
+  const [tab, setTab] = useState<"home" | "stats">("home");
   const [now, setNow] = useState(() => new Date());
 
   // Tick cada minuto para recalcular ritmo
@@ -89,9 +92,7 @@ export default function App() {
   });
 
   const ps = pacingStatus(totalToday, expected);
-  const diffText =
-    ps.diff === 0 ? "0 ml" : `${ps.diff > 0 ? "+" : ""}${ps.diff} ml`;
-
+  const diffText = ps.diff === 0 ? "0 ml" : `${ps.diff > 0 ? "+" : ""}${ps.diff} ml`;
   const PaceIcon = ps.diff === 0 ? Minus : ps.diff < 0 ? TrendingDown : TrendingUp;
 
   async function add(amountMl: number) {
@@ -138,7 +139,9 @@ export default function App() {
             padding: "10px 12px",
             borderRadius: 12,
             border: "1px solid #e5e5e5",
-            background: "white"
+            background: "white",
+            color: "#111",
+            fontWeight: 800
           }}
           aria-label="Abrir ajustes"
         >
@@ -185,7 +188,7 @@ export default function App() {
                 borderBottom: "1px solid #eee"
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800 }}>
                 <SettingsIcon size={18} />
                 Ajustes
               </div>
@@ -215,143 +218,224 @@ export default function App() {
         </div>
       )}
 
-      {/* Tarjeta principal */}
-      <div
-        style={{
-          marginTop: 12,
-          padding: 16,
-          borderRadius: 16,
-          background: "white",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.05)"
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <div style={{ fontSize: 13, opacity: 0.65, display: "flex", alignItems: "center", gap: 6 }}>
-              <Droplets size={16} />
-              Hoy
-            </div>
-
-            <div style={{ fontSize: 34, fontWeight: 800, marginTop: 2 }}>
-              {fmtMl(totalToday)}
-            </div>
-
-            <div style={{ fontSize: 13, opacity: 0.75, marginTop: 6, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <Target size={16} />
-                Objetivo: {fmtMl(goal)} · {pct}%
-              </span>
-
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <Clock size={16} />
-                A esta hora: {fmtMl(expected)}
-              </span>
-
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <PaceIcon size={16} />
-                <strong style={{ fontWeight: 700 }}>{ps.label}</strong> ({diffText})
-              </span>
-            </div>
-          </div>
-
-          <div style={{ textAlign: "right" }}>
-            <select
-              value={quickAmount}
-              onChange={(e) => setQuickAmount(Number(e.target.value))}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 12,
-                border: "1px solid #e5e5e5",
-                background: "white"
-              }}
-              aria-label="Cantidad rápida"
-            >
-              {quickList.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-
-            <div style={{ height: 10 }} />
-
-            <button
-              onClick={() => add(quickAmount)}
-              style={{
-                padding: "12px 16px",
-                fontSize: 16,
-                borderRadius: 14,
-                border: "none",
-                background: "#111",
-                color: "white",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8
-              }}
-              aria-label={`Añadir ${quickAmount} ml`}
-            >
-              <Droplets size={18} />
-              + {quickAmount} ml
-            </button>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 14, width: "100%", height: 12, background: "#eee", borderRadius: 999 }}>
+      {/* CONTENT */}
+      {tab === "home" ? (
+        <>
+          {/* Tarjeta principal (Hoy) */}
           <div
             style={{
-              width: `${pct}%`,
-              height: "100%",
-              background: pct >= 100 ? "#2ecc71" : ps.diff < -150 ? "#e74c3c" : "#3498db",
-              borderRadius: 999,
-              transition: "width 0.3s ease"
+              marginTop: 12,
+              padding: 16,
+              borderRadius: 16,
+              background: "white",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.05)"
             }}
-          />
-        </div>
-      </div>
-
-      {/* Semana */}
-      <div style={{ marginTop: 16 }}>
-        <WeeklyChart goalMl={goal} />
-      </div>
-
-      {/* Registros */}
-      <h2 style={{ marginTop: 24, marginBottom: 10 }}>Registros de hoy</h2>
-
-      {todayEntries.length === 0 ? (
-        <div style={{ opacity: 0.65 }}>Aún no has registrado nada.</div>
-      ) : (
-        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-          {todayEntries.map((e) => (
-            <li
-              key={e.id}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "10px 0",
-                borderBottom: "1px solid #eee"
-              }}
-            >
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
-                <div style={{ fontWeight: 700 }}>{fmtMl(e.amountMl)}</div>
-                <div style={{ fontSize: 12, opacity: 0.65 }}>
-                  {new Date(e.ts).toLocaleTimeString()}
+                <div
+                  style={{
+                    fontSize: 13,
+                    opacity: 0.65,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6
+                  }}
+                >
+                  <Droplets size={16} />
+                  Hoy
+                </div>
+
+                <div style={{ fontSize: 34, fontWeight: 800, marginTop: 2 }}>{fmtMl(totalToday)}</div>
+
+                <div
+                  style={{
+                    fontSize: 13,
+                    opacity: 0.75,
+                    marginTop: 6,
+                    display: "flex",
+                    gap: 10,
+                    flexWrap: "wrap"
+                  }}
+                >
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <Target size={16} />
+                    Objetivo: {fmtMl(goal)} · {pct}%
+                  </span>
+
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <Clock size={16} />
+                    A esta hora: {fmtMl(expected)}
+                  </span>
+
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <PaceIcon size={16} />
+                    <strong style={{ fontWeight: 800 }}>{ps.label}</strong> ({diffText})
+                  </span>
                 </div>
               </div>
-              <button
-                onClick={() => remove(e.id)}
+
+              <div style={{ textAlign: "right" }}>
+                <select
+                  value={quickAmount}
+                  onChange={(e) => setQuickAmount(Number(e.target.value))}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 12,
+                    border: "1px solid #e5e5e5",
+                    background: "white",
+                    color: "#111"
+                  }}
+                  aria-label="Cantidad rápida"
+                >
+                  {quickList.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+
+                <div style={{ height: 10 }} />
+
+                <button
+                  onClick={() => add(quickAmount)}
+                  style={{
+                    padding: "12px 16px",
+                    fontSize: 16,
+                    borderRadius: 14,
+                    border: "none",
+                    background: "#111",
+                    color: "white",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontWeight: 800
+                  }}
+                  aria-label={`Añadir ${quickAmount} ml`}
+                >
+                  <Droplets size={18} />
+                  + {quickAmount} ml
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 14, width: "100%", height: 12, background: "#eee", borderRadius: 999 }}>
+              <div
                 style={{
-                  border: "1px solid #eee",
-                  background: "white",
-                  borderRadius: 12,
-                  padding: "8px 10px"
+                  width: `${pct}%`,
+                  height: "100%",
+                  background: pct >= 100 ? "#2ecc71" : ps.diff < -150 ? "#e74c3c" : "#3498db",
+                  borderRadius: 999,
+                  transition: "width 0.3s ease"
                 }}
-              >
-                Borrar
-              </button>
-            </li>
-          ))}
-        </ul>
+              />
+            </div>
+          </div>
+
+          {/* Registros */}
+          <h2 style={{ marginTop: 18, marginBottom: 10 }}>Registros de hoy</h2>
+
+          {todayEntries.length === 0 ? (
+            <div style={{ opacity: 0.65 }}>Aún no has registrado nada.</div>
+          ) : (
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {todayEntries.map((e) => (
+                <li
+                  key={e.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    padding: "10px 0",
+                    borderBottom: "1px solid #eee"
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 800 }}>{fmtMl(e.amountMl)}</div>
+                    <div style={{ fontSize: 12, opacity: 0.65 }}>{new Date(e.ts).toLocaleTimeString()}</div>
+                  </div>
+                  <button
+                    onClick={() => remove(e.id)}
+                    style={{
+                      border: "1px solid #eee",
+                      background: "white",
+                      borderRadius: 12,
+                      padding: "8px 10px",
+                      color: "#111"
+                    }}
+                  >
+                    Borrar
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <div style={{ marginTop: 12 }}>
+          <StatsView goalMl={goal} />
+        </div>
       )}
+
+      {/* Spacer for bottom tab bar */}
+      <div style={{ height: 86 }} />
+
+      {/* Bottom Tab Bar */}
+      <div
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          padding: 12,
+          background: "rgba(250,250,250,0.9)",
+          backdropFilter: "blur(10px)",
+          borderTop: "1px solid #eee"
+        }}
+      >
+        <div style={{ maxWidth: 520, margin: "0 auto", display: "flex", gap: 10 }}>
+          <button
+            onClick={() => setTab("home")}
+            style={{
+              flex: 1,
+              padding: "12px 12px",
+              borderRadius: 14,
+              border: "1px solid #e5e5e5",
+              background: tab === "home" ? "#111" : "white",
+              color: tab === "home" ? "white" : "#111",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              fontWeight: 900
+            }}
+            aria-label="Ir a Hoy"
+          >
+            <Home size={18} />
+            Hoy
+          </button>
+
+          <button
+            onClick={() => setTab("stats")}
+            style={{
+              flex: 1,
+              padding: "12px 12px",
+              borderRadius: 14,
+              border: "1px solid #e5e5e5",
+              background: tab === "stats" ? "#111" : "white",
+              color: tab === "stats" ? "white" : "#111",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              fontWeight: 900
+            }}
+            aria-label="Ir a Estadísticas"
+          >
+            <BarChart3 size={18} />
+            Stats
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
