@@ -71,7 +71,7 @@ button, select, input{
 .muted{ color: var(--muted); }
 
 .btn{
-  border: 1px solid var(--line);
+  border: 1px solid #eee;
   background: rgba(255,255,255,0.06);
   padding: 10px 14px;
   border-radius: 14px;
@@ -81,8 +81,7 @@ button, select, input{
 .btn:active{ transform: translateY(1px); }
 
 .btnPrimary{
-  background: var(--accent);
-  border-color: rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.06);
   color: #061018;
   font-weight: 800;
 }
@@ -128,7 +127,6 @@ button, select, input{
 }
 
 .addBtn{
-  display:inline-flex;
   align-items:center;
   justify-content:center;
   gap: 10px;
@@ -139,7 +137,7 @@ button, select, input{
 
 .addBtn--tap{
   transform: scale(0.97);
-  filter: drop-shadow(0 10px 22px rgba(78,161,255,0.35));
+  filter: drop-shadow(0 10px 22px rgba(255,255,255,0.06));
 }
 
 /* Extra: feedback táctil visual cuando mantienes pulsado */
