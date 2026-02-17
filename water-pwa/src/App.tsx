@@ -24,6 +24,11 @@ function fmtMl(ml: number) {
   return `${ml} ml`;
 }
 
+function hapticLight() {
+  navigator.vibrate?.(10);
+}
+
+
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [quickAmount, setQuickAmount] = useState<number>(250);
@@ -101,6 +106,7 @@ export default function App() {
 
   async function remove(id?: number) {
     if (!id) return;
+    hapticLight();
     await db.entries.delete(id);
   }
 
