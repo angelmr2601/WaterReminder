@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, ensureDefaultSettings } from "./db";
 import type { Settings } from "./db";
@@ -18,11 +18,20 @@ import {
   Minus,
   Home,
   BarChart3,
-  Lightbulb
+  Lightbulb,
+  Undo2
 } from "lucide-react";
 
 function fmtMl(ml: number) {
   return `${ml} ml`;
+}
+
+// redondea hacia arriba a un botón rápido (para “ponerte en ritmo” de verdad)
+function roundUpToQuick(needMl: number, quickList: number[]) {
+  if (needMl <= 0) return 0;
+  const sorted = [...quickList].sort((a, b) => a - b);
+  const next = sorted.find((n) => n >= needMl);
+  return next ?? sorted[sorted.length - 1] ?? needMl;
 }
 
 export default function App() {
@@ -31,6 +40,13 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [tab, setTab] = useState<"home" | "stats">("home");
   const [now, setNow] = useState(() => new Date());
+
+  // feedback visual tipo “tap”
+  const [tap, setTap] = useState(false);
+
+  // undo toast
+  const [undoInfo, setUndoInfo] = useState<null | { id: number; amountMl: number }>(null);
+  const undoTimer = useRef<number | null>(null);
 
   // Tick cada minuto para recalcular ritmo
   useEffect(() => {
@@ -108,14 +124,36 @@ export default function App() {
   });
 
   const guideTime = guide.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const showGuide = ps.diff < -150 && guide.needMl > 0; // ajusta umbral si quieres
+  const showGuide = ps.diff < -150 && guide.needMl > 0; // umbral
+  const guideRoundedMl = roundUpToQuick(guide.needMl, quickList);
 
-  const [pressed, setPressed] = useState(false);
+  function startUndoTimer() {
+    if (undoTimer.current) window.clearTimeout(undoTimer.current);
+    undoTimer.current = window.setTimeout(() => {
+      setUndoInfo(null);
+      undoTimer.current = null;
+    }, 5000);
+  }
 
   async function add(amountMl: number) {
-    setPressed(true);
-    window.setTimeout(() => setPressed(false), 120);
-    await db.entries.add({ ts: Date.now(), amountMl, type: "water" });
+    // tap visual
+    setTap(true);
+    window.setTimeout(() => setTap(false), 140);
+
+    const id = (await db.entries.add({ ts: Date.now(), amountMl, type: "water" })) as number;
+
+    setUndoInfo({ id, amountMl });
+    startUndoTimer();
+  }
+
+  async function undoLast() {
+    if (!undoInfo) return;
+    await db.entries.delete(undoInfo.id);
+    setUndoInfo(null);
+    if (undoTimer.current) {
+      window.clearTimeout(undoTimer.current);
+      undoTimer.current = null;
+    }
   }
 
   async function remove(id?: number) {
@@ -140,14 +178,12 @@ export default function App() {
         margin: "0 auto",
         padding: 16,
         fontFamily: "system-ui",
-        background: "#fafafa",
-        minHeight: "100vh",
-        color: "#111"
+        minHeight: "100vh"
       }}
     >
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1 style={{ margin: 0, letterSpacing: -0.5 }}>Hydro</h1>
+        <h1 style={{ margin: 0, letterSpacing: -0.5 }}>WaterReminder</h1>
 
         <button
           onClick={() => setShowSettings(true)}
@@ -157,9 +193,8 @@ export default function App() {
             gap: 8,
             padding: "10px 12px",
             borderRadius: 12,
-            border: "1px solid #e5e5e5",
-            background: "white",
-            color: "#111",
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "rgba(255,255,255,0.06)",
             fontWeight: 800
           }}
           aria-label="Abrir ajustes"
@@ -191,11 +226,10 @@ export default function App() {
             style={{
               width: "100%",
               maxWidth: 520,
-              background: "white",
+              background: "rgba(20,20,20,0.98)",
               borderRadius: 16,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
-              overflow: "hidden",
-              color: "#111"
+              boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+              overflow: "hidden"
             }}
           >
             <div
@@ -204,7 +238,7 @@ export default function App() {
                 justifyContent: "space-between",
                 alignItems: "center",
                 padding: 12,
-                borderBottom: "1px solid #eee"
+                borderBottom: "1px solid rgba(255,255,255,0.10)"
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800 }}>
@@ -221,8 +255,8 @@ export default function App() {
                   width: 40,
                   height: 40,
                   borderRadius: 12,
-                  border: "1px solid #eee",
-                  background: "white"
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  background: "rgba(255,255,255,0.06)"
                 }}
                 aria-label="Cerrar ajustes"
               >
@@ -245,24 +279,25 @@ export default function App() {
             style={{
               marginTop: 12,
               padding: 16,
-              borderRadius: 16,
-              background: "white",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.05)"
+              borderRadius: 18,
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: "rgba(255,255,255,0.06)",
+              boxShadow: "0 12px 30px rgba(0,0,0,0.35)"
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
-                <div style={{ fontSize: 13, opacity: 0.65, display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ fontSize: 13, opacity: 0.75, display: "flex", alignItems: "center", gap: 6 }}>
                   <Droplets size={16} />
                   Hoy
                 </div>
 
-                <div style={{ fontSize: 34, fontWeight: 800, marginTop: 2 }}>{fmtMl(totalToday)}</div>
+                <div style={{ fontSize: 34, fontWeight: 900, marginTop: 2 }}>{fmtMl(totalToday)}</div>
 
                 <div
                   style={{
                     fontSize: 13,
-                    opacity: 0.75,
+                    opacity: 0.85,
                     marginTop: 6,
                     display: "flex",
                     gap: 10,
@@ -281,18 +316,19 @@ export default function App() {
 
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                     <PaceIcon size={16} />
-                    <strong style={{ fontWeight: 800 }}>{ps.label}</strong> ({diffText})
+                    <strong style={{ fontWeight: 900 }}>{ps.label}</strong> ({diffText})
                   </span>
                 </div>
 
+                {/* Tip + botón “Añadir ahora” */}
                 {showGuide && (
                   <div
                     style={{
                       marginTop: 10,
                       padding: "10px 12px",
                       borderRadius: 14,
-                      border: "1px solid #eee",
-                      background: "#fafafa",
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(255,255,255,0.06)",
                       fontSize: 13,
                       display: "flex",
                       gap: 10,
@@ -300,10 +336,30 @@ export default function App() {
                     }}
                   >
                     <Lightbulb size={18} style={{ marginTop: 1 }} />
-                    <div>
+                    <div style={{ flex: 1 }}>
                       Para ir en ritmo, bebe{" "}
-                      <strong>{guide.needMl} ml</strong> antes de{" "}
+                      <strong>{guideRoundedMl} ml</strong> antes de{" "}
                       <strong>{guideTime}</strong>.
+                      <div style={{ marginTop: 10 }}>
+                        <button
+                          onClick={() => add(guideRoundedMl)}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "10px 12px",
+                            borderRadius: 14,
+                            border: "1px solid rgba(255,255,255,0.10)",
+                            background: "rgba(78,161,255,0.95)",
+                            color: "#061018",
+                            fontWeight: 900
+                          }}
+                          aria-label={`Añadir recomendación ${guideRoundedMl} ml`}
+                        >
+                          <Droplets size={18} />
+                          Añadir ahora
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -315,10 +371,9 @@ export default function App() {
                   onChange={(e) => setQuickAmount(Number(e.target.value))}
                   style={{
                     padding: "8px 10px",
-                    borderRadius: 12,
-                    border: "1px solid #e5e5e5",
-                    background: "white",
-                    color: "#111"
+                    borderRadius: 999,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(0,0,0,0.18)"
                   }}
                   aria-label="Cantidad rápida"
                 >
@@ -333,7 +388,21 @@ export default function App() {
 
                 <button
                   onClick={() => add(quickAmount)}
-                  className={`btn btnPrimary addBtn ${pressed ? "addBtn--tap" : ""}`}
+                  style={{
+                    padding: "12px 16px",
+                    fontSize: 16,
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.18)",
+                    background: "rgba(78,161,255,0.95)",
+                    color: "#061018",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontWeight: 900,
+                    transform: tap ? "scale(0.97)" : "scale(1)",
+                    transition: "transform 140ms ease, filter 140ms ease",
+                    filter: tap ? "drop-shadow(0 10px 22px rgba(78,161,255,0.35))" : "none"
+                  }}
                   aria-label={`Añadir ${quickAmount} ml`}
                 >
                   <Droplets size={18} />
@@ -342,24 +411,34 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{ marginTop: 14, width: "100%", height: 12, background: "#eee", borderRadius: 999 }}>
+            <div
+              style={{
+                marginTop: 14,
+                width: "100%",
+                height: 12,
+                background: "rgba(255,255,255,0.08)",
+                borderRadius: 999,
+                overflow: "hidden",
+                border: "1px solid rgba(255,255,255,0.10)"
+              }}
+            >
               <div
                 style={{
                   width: `${pct}%`,
                   height: "100%",
-                  background: pct >= 100 ? "#2ecc71" : ps.diff < -150 ? "#e74c3c" : "#3498db",
+                  background: pct >= 100 ? "rgba(53,208,127,0.95)" : ps.diff < -150 ? "rgba(255,91,110,0.95)" : "rgba(78,161,255,0.95)",
                   borderRadius: 999,
-                  transition: "width 0.3s ease"
+                  transition: "width 0.35s ease"
                 }}
               />
             </div>
           </div>
 
           {/* Registros */}
-          <h2 style={{ marginTop: 18, marginBottom: 10 }}>Registros de hoy</h2>
+          <h2 style={{ marginTop: 18, marginBottom: 10, fontSize: 20, fontWeight: 900 }}>Registros de hoy</h2>
 
           {todayEntries.length === 0 ? (
-            <div style={{ opacity: 0.65 }}>Aún no has registrado nada.</div>
+            <div style={{ opacity: 0.75 }}>Aún no has registrado nada.</div>
           ) : (
             <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
               {todayEntries.map((e) => (
@@ -369,21 +448,20 @@ export default function App() {
                     display: "flex",
                     justifyContent: "space-between",
                     padding: "10px 0",
-                    borderBottom: "1px solid #eee"
+                    borderBottom: "1px solid rgba(255,255,255,0.10)"
                   }}
                 >
                   <div>
-                    <div style={{ fontWeight: 800 }}>{fmtMl(e.amountMl)}</div>
-                    <div style={{ fontSize: 12, opacity: 0.65 }}>{new Date(e.ts).toLocaleTimeString()}</div>
+                    <div style={{ fontWeight: 900 }}>{fmtMl(e.amountMl)}</div>
+                    <div style={{ fontSize: 12, opacity: 0.75 }}>{new Date(e.ts).toLocaleTimeString()}</div>
                   </div>
                   <button
                     onClick={() => remove(e.id)}
                     style={{
-                      border: "1px solid #eee",
-                      background: "white",
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(255,255,255,0.06)",
                       borderRadius: 12,
-                      padding: "8px 10px",
-                      color: "#111"
+                      padding: "8px 10px"
                     }}
                   >
                     Borrar
@@ -399,6 +477,58 @@ export default function App() {
         </div>
       )}
 
+      {/* UNDO toast */}
+      {undoInfo && (
+        <div
+          style={{
+            position: "fixed",
+            left: 12,
+            right: 12,
+            bottom: 92,
+            display: "flex",
+            justifyContent: "center",
+            zIndex: 60
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 520,
+              borderRadius: 16,
+              padding: "12px 12px",
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: "rgba(20,20,20,0.92)",
+              backdropFilter: "blur(10px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10
+            }}
+          >
+            <div style={{ fontSize: 13, opacity: 0.9 }}>
+              Añadido <strong>{undoInfo.amountMl} ml</strong>
+            </div>
+            <button
+              onClick={undoLast}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "10px 12px",
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.06)",
+                fontWeight: 900
+              }}
+              aria-label="Deshacer último añadido"
+            >
+              <Undo2 size={16} />
+              Deshacer
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Spacer for bottom tab bar */}
       <div style={{ height: 86 }} />
 
@@ -410,9 +540,9 @@ export default function App() {
           right: 0,
           bottom: 0,
           padding: 12,
-          background: "rgba(250,250,250,0.9)",
+          background: "rgba(11,15,20,0.82)",
           backdropFilter: "blur(10px)",
-          borderTop: "1px solid #eee"
+          borderTop: "1px solid rgba(255,255,255,0.10)"
         }}
       >
         <div style={{ maxWidth: 520, margin: "0 auto", display: "flex", gap: 10 }}>
@@ -422,14 +552,14 @@ export default function App() {
               flex: 1,
               padding: "12px 12px",
               borderRadius: 14,
-              border: "1px solid #e5e5e5",
-              background: tab === "home" ? "#111" : "white",
-              color: tab === "home" ? "white" : "#111",
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: tab === "home" ? "rgba(78,161,255,0.95)" : "rgba(255,255,255,0.06)",
+              color: tab === "home" ? "#061018" : "rgba(255,255,255,0.92)",
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
-              fontWeight: 900
+              fontWeight: 950
             }}
             aria-label="Ir a Hoy"
           >
@@ -443,14 +573,14 @@ export default function App() {
               flex: 1,
               padding: "12px 12px",
               borderRadius: 14,
-              border: "1px solid #e5e5e5",
-              background: tab === "stats" ? "#111" : "white",
-              color: tab === "stats" ? "white" : "#111",
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: tab === "stats" ? "rgba(78,161,255,0.95)" : "rgba(255,255,255,0.06)",
+              color: tab === "stats" ? "#061018" : "rgba(255,255,255,0.92)",
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
-              fontWeight: 900
+              fontWeight: 950
             }}
             aria-label="Ir a Estadísticas"
           >
