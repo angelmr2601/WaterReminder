@@ -25,7 +25,7 @@ function fmtMl(ml: number) {
 }
 
 function hapticLight() {
-  navigator.vibrate?.(10);
+  navigator.vibrate?.([8, 30, 8]);
 }
 
 
