@@ -121,7 +121,8 @@ export default function App() {
         padding: 16,
         fontFamily: "system-ui",
         background: "#fafafa",
-        minHeight: "100vh"
+        minHeight: "100vh",
+        color: "#111"
       }}
     >
       {/* Header */}
@@ -171,7 +172,8 @@ export default function App() {
               background: "white",
               borderRadius: 16,
               boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
-              overflow: "hidden"
+              overflow: "hidden",
+              color: "#111"
             }}
           >
             <div
