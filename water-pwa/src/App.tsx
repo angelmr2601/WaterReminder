@@ -4,6 +4,7 @@ import { db, ensureDefaultSettings } from "./db";
 import type { Settings } from "./db";
 import { startOfTodayMs, endOfTodayMs } from "./time";
 import { SettingsView } from "./SettingsView";
+import { expectedByNowMl, pacingStatus } from "./pacing";
 
 function fmtMl(ml: number) {
   return `${ml} ml`;
@@ -13,8 +14,15 @@ export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [quickAmount, setQuickAmount] = useState<number>(250);
   const [showSettings, setShowSettings] = useState(false);
+  const [now, setNow] = useState(() => new Date());
 
-  // Inicializa settings por defecto (si no existen)
+  // Tick cada minuto para recalcular ritmo
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Inicializa settings
   useEffect(() => {
     (async () => {
       await ensureDefaultSettings();
@@ -22,7 +30,7 @@ export default function App() {
     })();
   }, []);
 
-  // Mantén settings actualizados si se cambian desde SettingsView
+  // Mantener settings en vivo
   const liveSettings =
     useLiveQuery(async () => (await db.settings.get("me")) ?? null, []) ?? null;
 
@@ -30,6 +38,7 @@ export default function App() {
     if (liveSettings) setSettings(liveSettings);
   }, [liveSettings]);
 
+  // Entradas de hoy
   const todayEntries =
     useLiveQuery(async () => {
       const from = startOfTodayMs();
@@ -45,16 +54,30 @@ export default function App() {
 
   const goal = settings?.dailyGoalMl ?? 2000;
   const pct = Math.min(100, Math.round((totalToday / goal) * 100));
-
   const quickList = settings?.quickAmountsMl ?? [150, 250, 330, 500, 750];
 
-  // Ajusta quickAmount si no existe en la lista (por ejemplo si cambias quick buttons)
+  // Ajustar quickAmount si cambia lista
   useEffect(() => {
     if (!quickList.includes(quickAmount)) {
       setQuickAmount(quickList[0] ?? 250);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings?.quickAmountsMl]);
+
+  // Ritmo esperado
+  const wakeHour = settings?.wakeHour ?? 9;
+  const sleepHour = settings?.sleepHour ?? 22;
+
+  const expected = expectedByNowMl({
+    now,
+    wakeHour,
+    sleepHour,
+    dailyGoalMl: goal
+  });
+
+  const ps = pacingStatus(totalToday, expected);
+  const diffText =
+    ps.diff === 0 ? "0 ml" : `${ps.diff > 0 ? "+" : ""}${ps.diff} ml`;
 
   async function add(amountMl: number) {
     await db.entries.add({ ts: Date.now(), amountMl, type: "water" });
@@ -66,9 +89,24 @@ export default function App() {
   }
 
   return (
-    <div style={{ maxWidth: 520, margin: "0 auto", padding: 16, fontFamily: "system-ui" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1 style={{ marginTop: 0, marginBottom: 0 }}>Hydro</h1>
+    <div
+      style={{
+        maxWidth: 520,
+        margin: "0 auto",
+        padding: 16,
+        fontFamily: "system-ui",
+        background: "#fafafa",
+        minHeight: "100vh"
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center"
+        }}
+      >
+        <h1 style={{ margin: 0 }}>Hydro</h1>
         <button onClick={() => setShowSettings((v) => !v)}>
           {showSettings ? "Cerrar" : "Ajustes"}
         </button>
@@ -80,47 +118,85 @@ export default function App() {
         </div>
       )}
 
-      <div style={{ marginTop: 12, padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 14, opacity: 0.7 }}>Hoy</div>
-            <div style={{ fontSize: 28, fontWeight: 700 }}>{fmtMl(totalToday)}</div>
-            <div style={{ fontSize: 14, opacity: 0.7 }}>
-              Objetivo: {fmtMl(goal)} · {pct}%
-            </div>
-          </div>
+      <div
+        style={{
+          marginTop: 12,
+          padding: 16,
+          borderRadius: 16,
+          background: "white",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.05)"
+        }}
+      >
+        <div style={{ fontSize: 14, opacity: 0.6 }}>Hoy</div>
 
-          <div style={{ textAlign: "right" }}>
-            <select value={quickAmount} onChange={(e) => setQuickAmount(Number(e.target.value))}>
-              {quickList.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-            <div style={{ height: 8 }} />
-            <button onClick={() => add(quickAmount)} style={{ padding: "10px 14px" }}>
-              + {quickAmount} ml
-            </button>
-          </div>
+        <div style={{ fontSize: 32, fontWeight: 700 }}>
+          {fmtMl(totalToday)}
         </div>
 
-        <div style={{ height: 10 }} />
-        <div style={{ width: "100%", height: 10, background: "#eee", borderRadius: 999 }}>
+        <div style={{ fontSize: 14, opacity: 0.7 }}>
+          Objetivo: {fmtMl(goal)} · {pct}%
+        </div>
+
+        <div style={{ fontSize: 14, marginTop: 6 }}>
+          A esta hora: {fmtMl(expected)} ·{" "}
+          <strong>{ps.label}</strong> ({diffText})
+        </div>
+
+        <div
+          style={{
+            marginTop: 12,
+            width: "100%",
+            height: 12,
+            background: "#eee",
+            borderRadius: 999
+          }}
+        >
           <div
             style={{
               width: `${pct}%`,
               height: "100%",
-              background: "#111",
-              borderRadius: 999
+              background:
+                pct >= 100 ? "#2ecc71" : ps.diff < -150 ? "#e74c3c" : "#3498db",
+              borderRadius: 999,
+              transition: "width 0.3s ease"
             }}
           />
         </div>
+
+        <div style={{ marginTop: 16, textAlign: "right" }}>
+          <select
+            value={quickAmount}
+            onChange={(e) => setQuickAmount(Number(e.target.value))}
+          >
+            {quickList.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+
+          <div style={{ height: 8 }} />
+
+          <button
+            onClick={() => add(quickAmount)}
+            style={{
+              padding: "12px 18px",
+              fontSize: 16,
+              borderRadius: 12,
+              border: "none",
+              background: "#111",
+              color: "white"
+            }}
+          >
+            + {quickAmount} ml
+          </button>
+        </div>
       </div>
 
-      <h2 style={{ marginTop: 20 }}>Registros de hoy</h2>
+      <h2 style={{ marginTop: 24 }}>Registros de hoy</h2>
+
       {todayEntries.length === 0 ? (
-        <div style={{ opacity: 0.7 }}>Aún no has registrado nada.</div>
+        <div style={{ opacity: 0.6 }}>Aún no has registrado nada.</div>
       ) : (
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
           {todayEntries.map((e) => (
@@ -134,8 +210,10 @@ export default function App() {
               }}
             >
               <div>
-                <div style={{ fontWeight: 600 }}>{fmtMl(e.amountMl)}</div>
-                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                <div style={{ fontWeight: 600 }}>
+                  {fmtMl(e.amountMl)}
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.6 }}>
                   {new Date(e.ts).toLocaleTimeString()}
                 </div>
               </div>
