@@ -1,5 +1,3 @@
-import React from "react";
-
 export function WavesHero({
   progress = 0,
   width = 520,
