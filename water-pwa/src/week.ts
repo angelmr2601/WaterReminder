@@ -17,6 +17,5 @@ export function addDays(d: Date, days: number) {
 }
 
 export function dayLabel(d: Date) {
-  // Lun, Mar, Mié...
   return d.toLocaleDateString(undefined, { weekday: "short" });
 }

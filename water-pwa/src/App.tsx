@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, ensureDefaultSettings } from "./db";
 import type { Settings } from "./db";
-import { startOfTodayMs, endOfTodayMs } from "./time";
+import { startOfDayMs, endOfDayMs } from "./time";
 import { SettingsView } from "./SettingsView";
 import { expectedByNowMl, pacingStatus } from "./pacing";
+import { WeeklyChart } from "./WeeklyChart";
 
 function fmtMl(ml: number) {
   return `${ml} ml`;
@@ -41,8 +42,9 @@ export default function App() {
   // Entradas de hoy
   const todayEntries =
     useLiveQuery(async () => {
-      const from = startOfTodayMs();
-      const to = endOfTodayMs();
+      const today = new Date();
+      const from = startOfDayMs(today);
+      const to = endOfDayMs(today);
       const rows = await db.entries.where("ts").between(from, to, true, true).toArray();
       return rows.sort((a, b) => b.ts - a.ts);
     }, []) ?? [];
@@ -88,6 +90,7 @@ export default function App() {
     await db.entries.delete(id);
   }
 
+
   return (
     <div
       style={{
@@ -99,13 +102,7 @@ export default function App() {
         minHeight: "100vh"
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center"
-        }}
-      >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1 style={{ margin: 0 }}>Hydro</h1>
         <button onClick={() => setShowSettings((v) => !v)}>
           {showSettings ? "Cerrar" : "Ajustes"}
@@ -129,17 +126,14 @@ export default function App() {
       >
         <div style={{ fontSize: 14, opacity: 0.6 }}>Hoy</div>
 
-        <div style={{ fontSize: 32, fontWeight: 700 }}>
-          {fmtMl(totalToday)}
-        </div>
+        <div style={{ fontSize: 32, fontWeight: 700 }}>{fmtMl(totalToday)}</div>
 
         <div style={{ fontSize: 14, opacity: 0.7 }}>
           Objetivo: {fmtMl(goal)} · {pct}%
         </div>
 
         <div style={{ fontSize: 14, marginTop: 6 }}>
-          A esta hora: {fmtMl(expected)} ·{" "}
-          <strong>{ps.label}</strong> ({diffText})
+          A esta hora: {fmtMl(expected)} · <strong>{ps.label}</strong> ({diffText})
         </div>
 
         <div
@@ -155,8 +149,7 @@ export default function App() {
             style={{
               width: `${pct}%`,
               height: "100%",
-              background:
-                pct >= 100 ? "#2ecc71" : ps.diff < -150 ? "#e74c3c" : "#3498db",
+              background: pct >= 100 ? "#2ecc71" : ps.diff < -150 ? "#e74c3c" : "#3498db",
               borderRadius: 999,
               transition: "width 0.3s ease"
             }}
@@ -164,10 +157,7 @@ export default function App() {
         </div>
 
         <div style={{ marginTop: 16, textAlign: "right" }}>
-          <select
-            value={quickAmount}
-            onChange={(e) => setQuickAmount(Number(e.target.value))}
-          >
+          <select value={quickAmount} onChange={(e) => setQuickAmount(Number(e.target.value))}>
             {quickList.map((n) => (
               <option key={n} value={n}>
                 {n}
@@ -193,6 +183,10 @@ export default function App() {
         </div>
       </div>
 
+      <div style={{ marginTop: 16 }}>
+        <WeeklyChart goalMl={goal} />
+      </div>
+
       <h2 style={{ marginTop: 24 }}>Registros de hoy</h2>
 
       {todayEntries.length === 0 ? (
@@ -210,9 +204,7 @@ export default function App() {
               }}
             >
               <div>
-                <div style={{ fontWeight: 600 }}>
-                  {fmtMl(e.amountMl)}
-                </div>
+                <div style={{ fontWeight: 600 }}>{fmtMl(e.amountMl)}</div>
                 <div style={{ fontSize: 12, opacity: 0.6 }}>
                   {new Date(e.ts).toLocaleTimeString()}
                 </div>
