@@ -26,7 +26,7 @@ function fmtMl(ml: number) {
   return `${ml} ml`;
 }
 
-// redondea hacia arriba a un botón rápido (para “ponerte en ritmo” de verdad)
+// ✅ redondea hacia arriba a un botón rápido (para “ponerte en ritmo” de verdad)
 function roundUpToQuick(needMl: number, quickList: number[]) {
   if (needMl <= 0) return 0;
   const sorted = [...quickList].sort((a, b) => a - b);
@@ -40,13 +40,6 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [tab, setTab] = useState<"home" | "stats">("home");
   const [now, setNow] = useState(() => new Date());
-
-  // feedback visual tipo “tap”
-  const [tap, setTap] = useState(false);
-
-  // undo toast
-  const [undoInfo, setUndoInfo] = useState<null | { id: number; amountMl: number }>(null);
-  const undoTimer = useRef<number | null>(null);
 
   // Tick cada minuto para recalcular ritmo
   useEffect(() => {
@@ -124,8 +117,17 @@ export default function App() {
   });
 
   const guideTime = guide.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const showGuide = ps.diff < -150 && guide.needMl > 0; // umbral
+  const showGuide = ps.diff < -150 && guide.needMl > 0;
+
+  // ✅ cantidad redondeada a quick buttons
   const guideRoundedMl = roundUpToQuick(guide.needMl, quickList);
+
+  // tap visual (ya lo tenías)
+  const [pressed, setPressed] = useState(false);
+
+  // ✅ undo toast
+  const [undoInfo, setUndoInfo] = useState<null | { id: number; amountMl: number }>(null);
+  const undoTimer = useRef<number | null>(null);
 
   function startUndoTimer() {
     if (undoTimer.current) window.clearTimeout(undoTimer.current);
@@ -136,11 +138,12 @@ export default function App() {
   }
 
   async function add(amountMl: number) {
-    setTap(true);
-    window.setTimeout(() => setTap(false), 140);
+    setPressed(true);
+    window.setTimeout(() => setPressed(false), 120);
 
     const id = (await db.entries.add({ ts: Date.now(), amountMl, type: "water" })) as number;
 
+    // ✅ show undo
     setUndoInfo({ id, amountMl });
     startUndoTimer();
   }
@@ -171,20 +174,38 @@ export default function App() {
   }, [showSettings]);
 
   return (
-    <div className="container">
+    <div
+      style={{
+        maxWidth: 520,
+        margin: "0 auto",
+        padding: 16,
+        fontFamily: "system-ui",
+        background: "#fafafa",
+        minHeight: "100vh",
+        color: "#111"
+      }}
+    >
       {/* Header */}
-      <div className="header">
-        <h1 className="h1">Hydro</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h1 style={{ margin: 0, letterSpacing: -0.5 }}>WaterReminder</h1>
 
         <button
           onClick={() => setShowSettings(true)}
-          className="btn"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px solid #e5e5e5",
+            background: "white",
+            color: "#111",
+            fontWeight: 800
+          }}
           aria-label="Abrir ajustes"
         >
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <SettingsIcon size={18} />
-            Ajustes
-          </span>
+          <SettingsIcon size={18} />
+          Ajustes
         </button>
       </div>
 
@@ -194,16 +215,57 @@ export default function App() {
           role="dialog"
           aria-modal="true"
           onClick={() => setShowSettings(false)}
-          className="modalOverlay"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-end",
+            padding: 12,
+            zIndex: 50
+          }}
         >
-          <div onClick={(e) => e.stopPropagation()} className="modalSheet">
-            <div className="row" style={{ padding: 12, borderBottom: "1px solid var(--line)" }}>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 900 }}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 520,
+              background: "white",
+              borderRadius: 16,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+              overflow: "hidden",
+              color: "#111"
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: 12,
+                borderBottom: "1px solid #eee"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800 }}>
                 <SettingsIcon size={18} />
                 Ajustes
               </div>
 
-              <button onClick={() => setShowSettings(false)} className="btn" aria-label="Cerrar ajustes">
+              <button
+                onClick={() => setShowSettings(false)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 40,
+                  height: 40,
+                  borderRadius: 12,
+                  border: "1px solid #eee",
+                  background: "white"
+                }}
+                aria-label="Cerrar ajustes"
+              >
                 <XIcon size={18} />
               </button>
             </div>
@@ -219,65 +281,88 @@ export default function App() {
       {tab === "home" ? (
         <>
           {/* Tarjeta principal (Hoy) */}
-          <div className="card" style={{ marginTop: 12 }}>
-            <div className="row" style={{ alignItems: "flex-start" }}>
+          <div
+            style={{
+              marginTop: 12,
+              padding: 16,
+              borderRadius: 16,
+              background: "white",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.05)"
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
-                <div className="muted" style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ fontSize: 13, opacity: 0.65, display: "flex", alignItems: "center", gap: 6 }}>
                   <Droplets size={16} />
                   Hoy
                 </div>
 
-                <div style={{ fontSize: 34, fontWeight: 900, marginTop: 2 }}>
-                  {fmtMl(totalToday)}
-                </div>
+                <div style={{ fontSize: 34, fontWeight: 800, marginTop: 2 }}>{fmtMl(totalToday)}</div>
 
                 <div
-                  className="muted"
                   style={{
                     fontSize: 13,
-                    marginTop: 8,
+                    opacity: 0.75,
+                    marginTop: 6,
                     display: "flex",
                     gap: 10,
                     flexWrap: "wrap"
                   }}
                 >
-                  <span className="pill">
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                     <Target size={16} />
                     Objetivo: {fmtMl(goal)} · {pct}%
                   </span>
 
-                  <span className="pill">
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                     <Clock size={16} />
                     A esta hora: {fmtMl(expected)}
                   </span>
 
-                  <span className="pill">
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                     <PaceIcon size={16} />
-                    <strong style={{ fontWeight: 900, color: "var(--text)" }}>{ps.label}</strong> ({diffText})
+                    <strong style={{ fontWeight: 800 }}>{ps.label}</strong> ({diffText})
                   </span>
                 </div>
 
-                {/* Tip + botón “Añadir ahora” */}
                 {showGuide && (
-                  <div className="card tipCard" style={{ marginTop: 12 }}>
-                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                      <Lightbulb size={18} style={{ marginTop: 2 }} />
-                      <div style={{ flex: 1 }}>
-                        Para ir en ritmo, bebe{" "}
-                        <strong style={{ color: "var(--text)" }}>{guideRoundedMl} ml</strong>{" "}
-                        antes de <strong style={{ color: "var(--text)" }}>{guideTime}</strong>.
-                        <div style={{ marginTop: 10 }}>
-                          <button
-                            onClick={() => add(guideRoundedMl)}
-                            className="btn btnPrimary"
-                            aria-label={`Añadir recomendación ${guideRoundedMl} ml`}
-                          >
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                              <Droplets size={18} />
-                              Añadir ahora
-                            </span>
-                          </button>
-                        </div>
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: "10px 12px",
+                      borderRadius: 14,
+                      border: "1px solid #eee",
+                      background: "#fafafa",
+                      fontSize: 13,
+                      display: "flex",
+                      gap: 10,
+                      alignItems: "flex-start"
+                    }}
+                  >
+                    <Lightbulb size={18} style={{ marginTop: 1 }} />
+                    <div style={{ flex: 1 }}>
+                      Para ir en ritmo, bebe{" "}
+                      <strong>{guideRoundedMl} ml</strong> antes de{" "}
+                      <strong>{guideTime}</strong>.
+                      <div style={{ marginTop: 10 }}>
+                        <button
+                          onClick={() => add(guideRoundedMl)}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "10px 12px",
+                            borderRadius: 12,
+                            border: "1px solid #e5e5e5",
+                            background: "white",
+                            color: "#111",
+                            fontWeight: 800
+                          }}
+                          aria-label={`Añadir recomendación ${guideRoundedMl} ml`}
+                        >
+                          <Droplets size={18} />
+                          Añadir ahora
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -288,7 +373,13 @@ export default function App() {
                 <select
                   value={quickAmount}
                   onChange={(e) => setQuickAmount(Number(e.target.value))}
-                  className="select"
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 12,
+                    border: "1px solid #e5e5e5",
+                    background: "white",
+                    color: "#111"
+                  }}
                   aria-label="Cantidad rápida"
                 >
                   {quickList.map((n) => (
@@ -302,7 +393,7 @@ export default function App() {
 
                 <button
                   onClick={() => add(quickAmount)}
-                  className={`btn btnPrimary addBtn ${tap ? "addBtn--tap" : ""}`}
+                  className={`btn btnPrimary addBtn ${pressed ? "addBtn--tap" : ""}`}
                   aria-label={`Añadir ${quickAmount} ml`}
                 >
                   <Droplets size={18} />
@@ -311,27 +402,24 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{ marginTop: 14 }} className="progressTrack">
+            <div style={{ marginTop: 14, width: "100%", height: 12, background: "#eee", borderRadius: 999 }}>
               <div
-                className="progressFill"
                 style={{
                   width: `${pct}%`,
-                  background:
-                    pct >= 100
-                      ? "var(--good)"
-                      : ps.diff < -150
-                      ? "var(--bad)"
-                      : "var(--accent)"
+                  height: "100%",
+                  background: pct >= 100 ? "#2ecc71" : ps.diff < -150 ? "#e74c3c" : "#3498db",
+                  borderRadius: 999,
+                  transition: "width 0.3s ease"
                 }}
               />
             </div>
           </div>
 
           {/* Registros */}
-          <div className="sectionTitle">Registros de hoy</div>
+          <h2 style={{ marginTop: 18, marginBottom: 10 }}>Registros de hoy</h2>
 
           {todayEntries.length === 0 ? (
-            <div className="muted">Aún no has registrado nada.</div>
+            <div style={{ opacity: 0.65 }}>Aún no has registrado nada.</div>
           ) : (
             <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
               {todayEntries.map((e) => (
@@ -341,16 +429,23 @@ export default function App() {
                     display: "flex",
                     justifyContent: "space-between",
                     padding: "10px 0",
-                    borderBottom: "1px solid var(--line)"
+                    borderBottom: "1px solid #eee"
                   }}
                 >
                   <div>
-                    <div style={{ fontWeight: 900 }}>{fmtMl(e.amountMl)}</div>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      {new Date(e.ts).toLocaleTimeString()}
-                    </div>
+                    <div style={{ fontWeight: 800 }}>{fmtMl(e.amountMl)}</div>
+                    <div style={{ fontSize: 12, opacity: 0.65 }}>{new Date(e.ts).toLocaleTimeString()}</div>
                   </div>
-                  <button onClick={() => remove(e.id)} className="btn">
+                  <button
+                    onClick={() => remove(e.id)}
+                    style={{
+                      border: "1px solid #eee",
+                      background: "white",
+                      borderRadius: 12,
+                      padding: "8px 10px",
+                      color: "#111"
+                    }}
+                  >
                     Borrar
                   </button>
                 </li>
@@ -364,19 +459,56 @@ export default function App() {
         </div>
       )}
 
-      {/* UNDO toast */}
+      {/* ✅ UNDO toast (sin tocar estilos del resto) */}
       {undoInfo && (
-        <div className="toastWrap">
-          <div className="toast">
+        <div
+          style={{
+            position: "fixed",
+            left: 12,
+            right: 12,
+            bottom: 92,
+            display: "flex",
+            justifyContent: "center",
+            zIndex: 60
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 520,
+              borderRadius: 16,
+              padding: "12px 12px",
+              border: "1px solid #eee",
+              background: "white",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+              color: "#111"
+            }}
+          >
             <div style={{ fontSize: 13, opacity: 0.9 }}>
-              Añadido <strong style={{ color: "var(--text)" }}>{undoInfo.amountMl} ml</strong>
+              Añadido <strong>{undoInfo.amountMl} ml</strong>
             </div>
 
-            <button onClick={undoLast} className="btn" aria-label="Deshacer último añadido">
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                <Undo2 size={16} />
-                Deshacer
-              </span>
+            <button
+              onClick={undoLast}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid #e5e5e5",
+                background: "white",
+                color: "#111",
+                fontWeight: 800
+              }}
+              aria-label="Deshacer último añadido"
+            >
+              <Undo2 size={16} />
+              Deshacer
             </button>
           </div>
         </div>
@@ -386,11 +518,34 @@ export default function App() {
       <div style={{ height: 86 }} />
 
       {/* Bottom Tab Bar */}
-      <div className="tabBar">
+      <div
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          padding: 12,
+          background: "rgba(250,250,250,0.9)",
+          backdropFilter: "blur(10px)",
+          borderTop: "1px solid #eee"
+        }}
+      >
         <div style={{ maxWidth: 520, margin: "0 auto", display: "flex", gap: 10 }}>
           <button
             onClick={() => setTab("home")}
-            className={`btn tabBtn ${tab === "home" ? "tabBtn--active" : ""}`}
+            style={{
+              flex: 1,
+              padding: "12px 12px",
+              borderRadius: 14,
+              border: "1px solid #e5e5e5",
+              background: tab === "home" ? "#111" : "white",
+              color: tab === "home" ? "white" : "#111",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              fontWeight: 900
+            }}
             aria-label="Ir a Hoy"
           >
             <Home size={18} />
@@ -399,7 +554,19 @@ export default function App() {
 
           <button
             onClick={() => setTab("stats")}
-            className={`btn tabBtn ${tab === "stats" ? "tabBtn--active" : ""}`}
+            style={{
+              flex: 1,
+              padding: "12px 12px",
+              borderRadius: 14,
+              border: "1px solid #e5e5e5",
+              background: tab === "stats" ? "#111" : "white",
+              color: tab === "stats" ? "white" : "#111",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              fontWeight: 900
+            }}
             aria-label="Ir a Estadísticas"
           >
             <BarChart3 size={18} />
