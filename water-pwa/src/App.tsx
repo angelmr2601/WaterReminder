@@ -235,6 +235,17 @@ export default function App() {
     >
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+
+        <img
+          src="/logo.png"
+          alt="WaterReminder logo"
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            objectFit: "cover"
+          }}
+        />
         <h1 style={{ margin: 0, letterSpacing: -0.5 }}>WaterReminder</h1>
 
         <button
