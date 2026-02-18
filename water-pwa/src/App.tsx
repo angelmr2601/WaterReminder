@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, ensureDefaultSettings } from "./db";
-import type { Settings } from "./db";
+import type { Settings, DrinkType } from "./db";
 import { startOfDayMs, endOfDayMs } from "./time";
 import { SettingsView } from "./SettingsView";
 import { expectedByNowMl, pacingStatus, nextHourGuidance } from "./pacing";
@@ -19,14 +19,31 @@ import {
   Home,
   BarChart3,
   Lightbulb,
-  Undo2
+  Undo2,
+  Plus
 } from "lucide-react";
+
+const DRINKS: { type: DrinkType; label: string; emoji: string; factor: number }[] = [
+  { type: "water", label: "Agua", emoji: "💧", factor: 1.0 },
+  { type: "beer", label: "Cerveza", emoji: "🍺", factor: 0.2 },
+  { type: "soda", label: "Refresco", emoji: "🥤", factor: 0.5 }
+];
+
+function factorFor(type: unknown): number {
+  const t = String(type) as DrinkType;
+  return DRINKS.find((d) => d.type === t)?.factor ?? 1.0;
+}
+
+function labelFor(type: unknown): { emoji: string; label: string } {
+  const t = String(type) as DrinkType;
+  const d = DRINKS.find((x) => x.type === t);
+  return d ? { emoji: d.emoji, label: d.label } : { emoji: "💧", label: "Agua" };
+}
 
 function fmtMl(ml: number) {
   return `${ml} ml`;
 }
 
-// ✅ redondea hacia arriba a un botón rápido (para “ponerte en ritmo” de verdad)
 function roundUpToQuick(needMl: number, quickList: number[]) {
   if (needMl <= 0) return 0;
   const sorted = [...quickList].sort((a, b) => a - b);
@@ -37,6 +54,12 @@ function roundUpToQuick(needMl: number, quickList: number[]) {
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [quickAmount, setQuickAmount] = useState<number>(250);
+
+  const [drinkType, setDrinkType] = useState<DrinkType>("water");
+
+  // Bubble menu open/close
+  const [fabOpen, setFabOpen] = useState(false);
+
   const [showSettings, setShowSettings] = useState(false);
   const [tab, setTab] = useState<"home" | "stats">("home");
   const [now, setNow] = useState(() => new Date());
@@ -73,20 +96,26 @@ export default function App() {
       return rows.sort((a, b) => b.ts - a.ts);
     }, []) ?? [];
 
-  const totalToday = useMemo(
+  const totalTodayRaw = useMemo(
     () => todayEntries.reduce((sum, e) => sum + e.amountMl, 0),
     [todayEntries]
   );
 
+  const totalTodayEffective = useMemo(
+    () =>
+      todayEntries.reduce((sum, e: any) => {
+        const f = factorFor(e.type);
+        return sum + e.amountMl * f;
+      }, 0),
+    [todayEntries]
+  );
+
   const goal = settings?.dailyGoalMl ?? 2000;
-  const pct = Math.min(100, Math.round((totalToday / goal) * 100));
+  const pct = Math.min(100, Math.round((totalTodayEffective / goal) * 100));
   const quickList = settings?.quickAmountsMl ?? [150, 250, 330, 500, 750];
 
-  // Ajustar quickAmount si cambia lista
   useEffect(() => {
-    if (!quickList.includes(quickAmount)) {
-      setQuickAmount(quickList[0] ?? 250);
-    }
+    if (!quickList.includes(quickAmount)) setQuickAmount(quickList[0] ?? 250);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings?.quickAmountsMl]);
 
@@ -101,7 +130,7 @@ export default function App() {
     dailyGoalMl: goal
   });
 
-  const ps = pacingStatus(totalToday, expected);
+  const ps = pacingStatus(totalTodayEffective, expected);
   const diffText = ps.diff === 0 ? "0 ml" : `${ps.diff > 0 ? "+" : ""}${ps.diff} ml`;
   const PaceIcon = ps.diff === 0 ? Minus : ps.diff < 0 ? TrendingDown : TrendingUp;
 
@@ -112,21 +141,18 @@ export default function App() {
     wakeHour,
     sleepHour,
     dailyGoalMl: goal,
-    totalTodayMl: totalToday,
+    totalTodayMl: totalTodayEffective,
     stepMinutes
   });
 
   const guideTime = guide.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const showGuide = ps.diff < -150 && guide.needMl > 0;
-
-  // ✅ cantidad redondeada a quick buttons
   const guideRoundedMl = roundUpToQuick(guide.needMl, quickList);
 
-  // tap visual (ya lo tenías)
-  const [pressed, setPressed] = useState(false);
-
-  // ✅ undo toast
-  const [undoInfo, setUndoInfo] = useState<null | { id: number; amountMl: number }>(null);
+  // Undo toast
+  const [undoInfo, setUndoInfo] = useState<null | { id: number; amountMl: number; type: DrinkType }>(
+    null
+  );
   const undoTimer = useRef<number | null>(null);
 
   function startUndoTimer() {
@@ -137,14 +163,9 @@ export default function App() {
     }, 5000);
   }
 
-  async function add(amountMl: number) {
-    setPressed(true);
-    window.setTimeout(() => setPressed(false), 120);
-
-    const id = (await db.entries.add({ ts: Date.now(), amountMl, type: "water" })) as number;
-
-    // ✅ show undo
-    setUndoInfo({ id, amountMl });
+  async function add(amountMl: number, type: DrinkType = drinkType) {
+    const id = (await db.entries.add({ ts: Date.now(), amountMl, type })) as number;
+    setUndoInfo({ id, amountMl, type });
     startUndoTimer();
   }
 
@@ -163,7 +184,7 @@ export default function App() {
     await db.entries.delete(id);
   }
 
-  // Cerrar modal: tecla ESC
+  // Cerrar modal: tecla ESC (ajustes)
   useEffect(() => {
     if (!showSettings) return;
     const onKey = (e: KeyboardEvent) => {
@@ -172,6 +193,33 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [showSettings]);
+
+  // Cerrar bubble menu: tecla ESC
+  useEffect(() => {
+    if (!fabOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFabOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fabOpen]);
+
+  const effectiveRounded = Math.round(totalTodayEffective);
+
+  const bubbles = DRINKS.map((d, i) => {
+    // posiciones "fan" (ajusta si metes más bebidas)
+    const pos = [
+      { dx: -92, dy: -74 },
+      { dx: 0, dy: -108 },
+      { dx: 92, dy: -74 },
+      { dx: 92, dy: 0 },
+      { dx: 0, dy: 108 },
+      { dx: -92, dy: 74 }
+    ];
+
+    const p = pos[i] ?? { dx: 0, dy: -108 };
+    return { type: d.type, dx: p.dx, dy: p.dy };
+  });
 
   return (
     <div
@@ -291,13 +339,17 @@ export default function App() {
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div>
+              <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, opacity: 0.65, display: "flex", alignItems: "center", gap: 6 }}>
                   <Droplets size={16} />
                   Hoy
                 </div>
 
-                <div style={{ fontSize: 34, fontWeight: 800, marginTop: 2 }}>{fmtMl(totalToday)}</div>
+                <div style={{ fontSize: 34, fontWeight: 800, marginTop: 2 }}>{fmtMl(effectiveRounded)}</div>
+
+                <div style={{ fontSize: 12, opacity: 0.65, marginTop: 2 }}>
+                  Consumido: {fmtMl(totalTodayRaw)}
+                </div>
 
                 <div
                   style={{
@@ -341,34 +393,20 @@ export default function App() {
                   >
                     <Lightbulb size={18} style={{ marginTop: 1 }} />
                     <div style={{ flex: 1 }}>
-                      Para ir en ritmo, bebe{" "}
-                      <strong>{guideRoundedMl} ml</strong> antes de{" "}
+                      Para ir en ritmo, bebe <strong>{guideRoundedMl} ml</strong> antes de{" "}
                       <strong>{guideTime}</strong>.
-                      <div style={{ marginTop: 10 }}>
-                        <button
-                          onClick={() => add(guideRoundedMl)}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 8,
-                            padding: "10px 12px",
-                            borderRadius: 12,
-                            border: "1px solid #e5e5e5",
-                            background: "white",
-                            color: "#111",
-                            fontWeight: 800
-                          }}
-                          aria-label={`Añadir recomendación ${guideRoundedMl} ml`}
-                        >
-                          <Droplets size={18} />
-                          Añadir ahora
-                        </button>
+                      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
+                        Bebida actual:{" "}
+                        <strong>
+                          {labelFor(drinkType).emoji} {labelFor(drinkType).label}
+                        </strong>
                       </div>
                     </div>
                   </div>
                 )}
               </div>
 
+              {/* Arriba SOLO cantidad */}
               <div style={{ textAlign: "right" }}>
                 <select
                   value={quickAmount}
@@ -389,16 +427,11 @@ export default function App() {
                   ))}
                 </select>
 
-                <div style={{ height: 10 }} />
+                <div style={{ height: 8 }} />
 
-                <button
-                  onClick={() => add(quickAmount)}
-                  className={`btn btnPrimary addBtn ${pressed ? "addBtn--tap" : ""}`}
-                  aria-label={`Añadir ${quickAmount} ml`}
-                >
-                  <Droplets size={18} />
-                  + {quickAmount} ml
-                </button>
+                <div style={{ fontSize: 12, opacity: 0.65 }}>
+                  {labelFor(drinkType).emoji} {labelFor(drinkType).label}
+                </div>
               </div>
             </div>
 
@@ -422,34 +455,45 @@ export default function App() {
             <div style={{ opacity: 0.65 }}>Aún no has registrado nada.</div>
           ) : (
             <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-              {todayEntries.map((e) => (
-                <li
-                  key={e.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    padding: "10px 0",
-                    borderBottom: "1px solid #eee"
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 800 }}>{fmtMl(e.amountMl)}</div>
-                    <div style={{ fontSize: 12, opacity: 0.65 }}>{new Date(e.ts).toLocaleTimeString()}</div>
-                  </div>
-                  <button
-                    onClick={() => remove(e.id)}
+              {todayEntries.map((e: any) => {
+                const d = labelFor(e.type);
+                const eff = Math.round(e.amountMl * factorFor(e.type));
+                return (
+                  <li
+                    key={e.id}
                     style={{
-                      border: "1px solid #eee",
-                      background: "white",
-                      borderRadius: 12,
-                      padding: "8px 10px",
-                      color: "#111"
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "10px 0",
+                      borderBottom: "1px solid #eee"
                     }}
                   >
-                    Borrar
-                  </button>
-                </li>
-              ))}
+                    <div>
+                      <div style={{ fontWeight: 800 }}>
+                        {fmtMl(e.amountMl)}{" "}
+                        <span style={{ opacity: 0.75, fontWeight: 600 }}>
+                          · {d.emoji} {d.label}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.65 }}>
+                        {new Date(e.ts).toLocaleTimeString()} · Hidratación: {fmtMl(eff)}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => remove(e.id)}
+                      style={{
+                        border: "1px solid #eee",
+                        background: "white",
+                        borderRadius: 12,
+                        padding: "8px 10px",
+                        color: "#111"
+                      }}
+                    >
+                      Borrar
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </>
@@ -459,7 +503,96 @@ export default function App() {
         </div>
       )}
 
-      {/* ✅ UNDO toast (sin tocar estilos del resto) */}
+      {/* Overlay para cerrar el bubble menu al tocar fuera */}
+      {fabOpen && (
+        <div
+          onClick={() => setFabOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "transparent",
+            zIndex: 65
+          }}
+        />
+      )}
+
+      {/* Bubble menu */}
+      <div
+        style={{
+          position: "fixed",
+          left: "50%",
+          transform: "translateX(-50%)",
+          bottom: 92,
+          zIndex: 70
+        }}
+      >
+        {/* Burbujas */}
+        {bubbles.map((b) => {
+          const d = DRINKS.find((x) => x.type === b.type)!;
+          const active = drinkType === b.type;
+
+          return (
+            <button
+              key={b.type}
+              onClick={() => {
+                // seleccionar bebida
+                setDrinkType(b.type);
+
+                // añadir al tocar bebida:
+                const amountToAdd = showGuide && guideRoundedMl > 0 ? guideRoundedMl : quickAmount;
+                add(amountToAdd, b.type);
+
+                // cerrar menú
+                setFabOpen(false);
+              }}
+              style={{
+                position: "absolute",
+                left: fabOpen ? b.dx : 0,
+                bottom: fabOpen ? -b.dy : 0,
+                width: 56,
+                height: 56,
+                borderRadius: 999,
+                border: active ? "2px solid #111" : "1px solid #e5e5e5",
+                background: "white",
+                boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: fabOpen ? 1 : 0,
+                pointerEvents: fabOpen ? "auto" : "none",
+                transform: fabOpen ? "scale(1)" : "scale(0.85)",
+                transition: "all 180ms ease"
+              }}
+              aria-label={`Añadir ${d.label}`}
+              title={`Añadir (${d.label})`}
+            >
+              <span style={{ fontSize: 22 }}>{d.emoji}</span>
+            </button>
+          );
+        })}
+
+        {/* Botón principal: abre/cierra menú */}
+        <button
+          onClick={() => setFabOpen((v) => !v)}
+          style={{
+            width: 66,
+            height: 66,
+            borderRadius: 999,
+            border: "1px solid #e5e5e5",
+            background: fabOpen ? "#22c55e" : "#111",
+            color: "white",
+            boxShadow: "0 12px 26px rgba(0,0,0,0.22)",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+          aria-label={fabOpen ? "Cerrar menú bebidas" : "Abrir menú bebidas"}
+        >
+          {fabOpen ? <XIcon size={26} /> : <Plus size={26} />}
+        </button>
+      </div>
+
+      {/* UNDO toast */}
       {undoInfo && (
         <div
           style={{
@@ -489,7 +622,10 @@ export default function App() {
             }}
           >
             <div style={{ fontSize: 13, opacity: 0.9 }}>
-              Añadido <strong>{undoInfo.amountMl} ml</strong>
+              Añadido <strong>{undoInfo.amountMl} ml</strong>{" "}
+              <span style={{ opacity: 0.75 }}>
+                · {labelFor(undoInfo.type).emoji} {labelFor(undoInfo.type).label}
+              </span>
             </div>
 
             <button

@@ -1,15 +1,15 @@
 import Dexie from "dexie";
 import type { Table } from "dexie";
 
-export type DrinkType = "water" | "coffee" | "tea" | "other";
+export type DrinkType = "water" | "beer" | "soda";
 
 export type Entry = {
   id?: number;
   ts: number;
   amountMl: number;
   type: DrinkType;
-  note?: string;
 };
+
 
 export type Settings = {
   id: "me";
@@ -19,6 +19,7 @@ export type Settings = {
   stepMinutes: number;
   quickAmountsMl: number[]; // <-- nuevo
 };
+
 
 class AppDB extends Dexie {
   entries!: Table<Entry, number>;
