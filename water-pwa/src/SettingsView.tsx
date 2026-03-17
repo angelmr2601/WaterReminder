@@ -12,17 +12,23 @@ import {
   Smartphone
 } from "lucide-react";
 import {
+  getPushAvailability,
   getPushStatus,
   hasPushConfig,
   subscribeToPush,
   unsubscribeFromPush
 } from "./notifications";
 
+const initialAvailability = hasPushConfig() ? getPushAvailability() : "unconfigured";
+
 export function SettingsView() {
   const [s, setS] = useState<Settings | null>(null);
   const [quickInput, setQuickInput] = useState("");
   const [savedPing, setSavedPing] = useState(false);
-  const [pushReady, setPushReady] = useState(false);
+  const [pushReady, setPushReady] = useState(initialAvailability === "ready");
+  const [pushError, setPushError] = useState<string | null>(
+    initialAvailability === "unsupported" ? "Este navegador no soporta notificaciones push web." : null
+  );
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
   const [pushBusy, setPushBusy] = useState(false);
@@ -34,12 +40,16 @@ export function SettingsView() {
   }, []);
 
   useEffect(() => {
-    if (!hasPushConfig()) return;
+    if (!hasPushConfig() || initialAvailability !== "ready") return;
+
     (async () => {
       const status = await getPushStatus();
-      setPushReady(status.configured);
+      setPushReady(status.available);
       setPushSubscribed(status.subscribed);
       setPushPermission(status.permission);
+      if (status.blockedByClient) {
+        setPushError("OneSignal fue bloqueado por Safari o por un bloqueador de contenido.");
+      }
     })();
   }, []);
 
@@ -102,13 +112,36 @@ export function SettingsView() {
           </div>
         ) : (
           <>
-            <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 10 }}>
+            <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 8 }}>
               Estado: {pushSubscribed ? "suscrito" : "no suscrito"} · Permiso: {pushPermission}
             </div>
+
+            {pushError && (
+              <div style={{ fontSize: 12, color: "#a33", marginBottom: 10 }}>
+                {pushError}
+              </div>
+            )}
 
             <button
               onClick={async () => {
                 setPushBusy(true);
+                setPushError(null);
+
+                if (!pushReady) {
+                  const status = await getPushStatus();
+                  setPushReady(status.available);
+                  setPushPermission(status.permission);
+                  if (!status.available) {
+                    setPushError(
+                      status.blockedByClient
+                        ? "OneSignal está bloqueado por el navegador o un bloqueador de anuncios/contenido."
+                        : "No se puede activar push en este navegador."
+                    );
+                    setPushBusy(false);
+                    return;
+                  }
+                }
+
                 if (pushSubscribed) {
                   const stillSubscribed = await unsubscribeFromPush();
                   setPushSubscribed(stillSubscribed);
@@ -117,10 +150,10 @@ export function SettingsView() {
                   setPushSubscribed(nowSubscribed);
                   setPushPermission(Notification.permission);
                 }
-                setPushReady(true);
+
                 setPushBusy(false);
               }}
-              disabled={pushBusy || !pushReady}
+              disabled={pushBusy}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -134,7 +167,7 @@ export function SettingsView() {
               }}
             >
               <Smartphone size={16} />
-              {pushBusy ? "Conectando..." : pushSubscribed ? "Desactivar avisos" : "Activar avisos"}
+              {pushBusy ? "Conectando..." : pushSubscribed ? "Desactivar avisos" : pushReady ? "Activar avisos" : "Reintentar conexión"}
             </button>
           </>
         )}

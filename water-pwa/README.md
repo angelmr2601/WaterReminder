@@ -54,25 +54,11 @@ npm run lint
 npm run preview
 ```
 
-### 4) Uso en la app
-1. Abre **Ajustes**.
-2. En “Notificaciones al móvil”, pulsa **Activar avisos**.
-3. Acepta el permiso del navegador.
-
-> Importante: en producción necesitas HTTPS para recibir push.
-
-## Scripts
-
-```bash
-npm run dev
-npm run build
-npm run lint
-npm run preview
-```
-
 ## Troubleshooting rápido (si no aparecen suscriptores)
 
 - Verifica en el navegador que `https://tu-dominio/onesignal/OneSignalSDKWorker.js` responda `200` y no esté vacío.
 - Comprueba que el dominio en OneSignal coincide exactamente con el de Vercel (incluyendo `www` o sin `www`).
 - Tras cambiar variables en Vercel, haz un redeploy para que Vite regenere el build.
 - Después de aceptar permiso, pulsa **Activar avisos** en Ajustes para hacer `optIn` explícito.
+
+- Si ves `ERR_BLOCKED_BY_CLIENT`, normalmente Safari o una extensión está bloqueando el SDK de OneSignal. Desactiva bloqueadores para el dominio y vuelve a pulsar **Activar avisos**.
