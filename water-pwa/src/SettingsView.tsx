@@ -7,17 +7,41 @@ import {
   Timer,
   Zap,
   Save,
-  Droplets
+  Droplets,
+  Bell,
+  Smartphone
 } from "lucide-react";
+import {
+  getLastPushError,
+  getPushStatus,
+  hasPushConfig,
+  subscribeToPush,
+  unsubscribeFromPush
+} from "./notifications";
 
 export function SettingsView() {
   const [s, setS] = useState<Settings | null>(null);
   const [quickInput, setQuickInput] = useState("");
   const [savedPing, setSavedPing] = useState(false);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
+  const blockedByClient = Boolean(pushError && pushError.includes("ERR_BLOCKED_BY_CLIENT"));
 
   useEffect(() => {
     (async () => {
       setS((await db.settings.get("me")) ?? null);
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!hasPushConfig()) return;
+    (async () => {
+      const status = await getPushStatus();
+      setPushSubscribed(status.subscribed);
+      setPushPermission(status.permission);
+      setPushError(getLastPushError());
     })();
   }, []);
 
@@ -68,6 +92,67 @@ export function SettingsView() {
 
   return (
     <div>
+      <section style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, marginBottom: 10 }}>
+          <Bell size={18} />
+          Notificaciones al móvil
+        </div>
+
+        {!hasPushConfig() ? (
+          <div style={{ fontSize: 14, opacity: 0.75 }}>
+            Configura <code>VITE_ONESIGNAL_APP_ID</code> (y en Safari también <code>VITE_ONESIGNAL_SAFARI_WEB_ID</code>) en tu <code>.env</code>.
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 10 }}>
+              Estado: {pushSubscribed ? "suscrito" : "no suscrito"} · Permiso: {pushPermission}
+            </div>
+
+            <button
+              onClick={async () => {
+                try {
+                  setPushBusy(true);
+                  if (pushSubscribed) {
+                    const stillSubscribed = await unsubscribeFromPush();
+                    setPushSubscribed(stillSubscribed);
+                  } else {
+                    const nowSubscribed = await subscribeToPush();
+                    setPushSubscribed(nowSubscribed);
+                    setPushPermission(Notification.permission);
+                  }
+
+                  setPushError(getLastPushError());
+                } finally {
+                  setPushBusy(false);
+                }
+              }}
+              disabled={pushBusy}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "12px 12px",
+                borderRadius: 12,
+                border: "1px solid #e5e5e5",
+                background: pushSubscribed ? "#fff" : "#111",
+                color: pushSubscribed ? "#111" : "#fff",
+                fontWeight: 700
+              }}
+            >
+              <Smartphone size={16} />
+              {pushBusy ? "Conectando..." : pushSubscribed ? "Desactivar avisos" : "Activar avisos"}
+            </button>
+
+            {pushError && (
+              <div style={{ marginTop: 10, fontSize: 13, color: "#b42318" }}>
+                {pushError}{blockedByClient ? " Desactiva temporalmente el adblock/anti-tracker para este dominio y vuelve a pulsar 'Activar avisos'." : ""}
+              </div>
+            )}
+
+          </>
+        )}
+      </section>
+
       {/* Objetivo */}
       <section style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, marginBottom: 10 }}>
