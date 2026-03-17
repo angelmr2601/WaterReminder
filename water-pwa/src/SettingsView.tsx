@@ -12,7 +12,6 @@ import {
   Smartphone
 } from "lucide-react";
 import {
-  getLastPushError,
   getPushStatus,
   hasPushConfig,
   subscribeToPush,
@@ -23,11 +22,10 @@ export function SettingsView() {
   const [s, setS] = useState<Settings | null>(null);
   const [quickInput, setQuickInput] = useState("");
   const [savedPing, setSavedPing] = useState(false);
+  const [pushReady, setPushReady] = useState(false);
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
   const [pushBusy, setPushBusy] = useState(false);
-  const [pushError, setPushError] = useState<string | null>(null);
-  const blockedByClient = Boolean(pushError && pushError.includes("ERR_BLOCKED_BY_CLIENT"));
 
   useEffect(() => {
     (async () => {
@@ -39,9 +37,9 @@ export function SettingsView() {
     if (!hasPushConfig()) return;
     (async () => {
       const status = await getPushStatus();
+      setPushReady(status.configured);
       setPushSubscribed(status.subscribed);
       setPushPermission(status.permission);
-      setPushError(getLastPushError());
     })();
   }, []);
 
@@ -110,23 +108,19 @@ export function SettingsView() {
 
             <button
               onClick={async () => {
-                try {
-                  setPushBusy(true);
-                  if (pushSubscribed) {
-                    const stillSubscribed = await unsubscribeFromPush();
-                    setPushSubscribed(stillSubscribed);
-                  } else {
-                    const nowSubscribed = await subscribeToPush();
-                    setPushSubscribed(nowSubscribed);
-                    setPushPermission(Notification.permission);
-                  }
-
-                  setPushError(getLastPushError());
-                } finally {
-                  setPushBusy(false);
+                setPushBusy(true);
+                if (pushSubscribed) {
+                  const stillSubscribed = await unsubscribeFromPush();
+                  setPushSubscribed(stillSubscribed);
+                } else {
+                  const nowSubscribed = await subscribeToPush();
+                  setPushSubscribed(nowSubscribed);
+                  setPushPermission(Notification.permission);
                 }
+                setPushReady(true);
+                setPushBusy(false);
               }}
-              disabled={pushBusy}
+              disabled={pushBusy || !pushReady}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -142,13 +136,6 @@ export function SettingsView() {
               <Smartphone size={16} />
               {pushBusy ? "Conectando..." : pushSubscribed ? "Desactivar avisos" : "Activar avisos"}
             </button>
-
-            {pushError && (
-              <div style={{ marginTop: 10, fontSize: 13, color: "#b42318" }}>
-                {pushError}{blockedByClient ? " Desactiva temporalmente el adblock/anti-tracker para este dominio y vuelve a pulsar 'Activar avisos'." : ""}
-              </div>
-            )}
-
           </>
         )}
       </section>

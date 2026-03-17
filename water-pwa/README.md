@@ -34,15 +34,24 @@ VITE_ONESIGNAL_SAFARI_WEB_ID=web.onesignal.auto.1997779e-e1de-41f4-ac74-4543cfbf
 ```
 
 ### 3) Service worker
-Los workers de OneSignal deben existir y cargar el SDK oficial. En este proyecto van en:
+El worker de OneSignal ya está incluido en:
 
 - `public/onesignal/OneSignalSDKWorker.js`
-- `public/onesignal/OneSignalSDKUpdaterWorker.js`
 
-Ambos deben contener:
+### 4) Uso en la app
+1. Abre **Ajustes**.
+2. En “Notificaciones al móvil”, pulsa **Activar avisos**.
+3. Acepta el permiso del navegador.
 
-```js
-importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+> Importante: en producción necesitas HTTPS para recibir push.
+
+## Scripts
+
+```bash
+npm run dev
+npm run build
+npm run lint
+npm run preview
 ```
 
 ### 4) Uso en la app
