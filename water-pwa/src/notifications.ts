@@ -14,8 +14,7 @@ export async function initPush() {
   if (!initPromise) {
     const initOptions = {
       appId,
-      serviceWorkerPath: "/onesignal/OneSignalSDKWorker.js",
-      serviceWorkerUpdaterPath: "/onesignal/OneSignalSDKUpdaterWorker.js",
+      serviceWorkerPath: "onesignal/OneSignalSDKWorker.js",
       allowLocalhostAsSecureOrigin: true,
       ...(safariWebId ? { safari_web_id: safariWebId } : {})
     };

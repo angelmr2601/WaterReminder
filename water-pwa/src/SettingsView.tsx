@@ -22,6 +22,7 @@ export function SettingsView() {
   const [s, setS] = useState<Settings | null>(null);
   const [quickInput, setQuickInput] = useState("");
   const [savedPing, setSavedPing] = useState(false);
+  const [pushReady, setPushReady] = useState(false);
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
   const [pushBusy, setPushBusy] = useState(false);
@@ -36,6 +37,7 @@ export function SettingsView() {
     if (!hasPushConfig()) return;
     (async () => {
       const status = await getPushStatus();
+      setPushReady(status.configured);
       setPushSubscribed(status.subscribed);
       setPushPermission(status.permission);
     })();
@@ -106,21 +108,19 @@ export function SettingsView() {
 
             <button
               onClick={async () => {
-                try {
-                  setPushBusy(true);
-                  if (pushSubscribed) {
-                    const stillSubscribed = await unsubscribeFromPush();
-                    setPushSubscribed(stillSubscribed);
-                  } else {
-                    const nowSubscribed = await subscribeToPush();
-                    setPushSubscribed(nowSubscribed);
-                    setPushPermission(Notification.permission);
-                  }
-                } finally {
-                  setPushBusy(false);
+                setPushBusy(true);
+                if (pushSubscribed) {
+                  const stillSubscribed = await unsubscribeFromPush();
+                  setPushSubscribed(stillSubscribed);
+                } else {
+                  const nowSubscribed = await subscribeToPush();
+                  setPushSubscribed(nowSubscribed);
+                  setPushPermission(Notification.permission);
                 }
+                setPushReady(true);
+                setPushBusy(false);
               }}
-              disabled={pushBusy}
+              disabled={pushBusy || !pushReady}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
