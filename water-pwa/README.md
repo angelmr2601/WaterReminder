@@ -1,73 +1,55 @@
-# React + TypeScript + Vite
+# WaterReminder (PWA)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+App web para registrar hidratación y recibir recordatorios.
 
-Currently, two official plugins are available:
+## Notificaciones push en móvil con OneSignal
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+La app ya está integrada con **react-onesignal**. No necesitas pegar manualmente el `<script>` de OneSignal en `index.html`.
 
-## React Compiler
+### 1) Código obtenido en OneSignal
+Si OneSignal te dio algo así:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```html
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: "1834a348-0952-4206-9d1b-69135970fe75",
+      safari_web_id: "web.onesignal.auto.1997779e-e1de-41f4-ac74-4543cfbf0412",
+      notifyButton: { enable: true }
+    });
+  });
+</script>
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+en este proyecto debes pasar esos valores por variables de entorno.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 2) Configurar variables de entorno
+Crea `.env` en la raíz de `water-pwa`:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+VITE_ONESIGNAL_APP_ID=1834a348-0952-4206-9d1b-69135970fe75
+VITE_ONESIGNAL_SAFARI_WEB_ID=web.onesignal.auto.1997779e-e1de-41f4-ac74-4543cfbf0412
+```
+
+### 3) Service worker
+El worker de OneSignal ya está incluido en:
+
+- `public/onesignal/OneSignalSDKWorker.js`
+
+### 4) Uso en la app
+1. Abre **Ajustes**.
+2. En “Notificaciones al móvil”, pulsa **Activar avisos**.
+3. Acepta el permiso del navegador.
+
+> Importante: en producción necesitas HTTPS para recibir push.
+
+## Scripts
+
+```bash
+npm run dev
+npm run build
+npm run lint
+npm run preview
 ```
