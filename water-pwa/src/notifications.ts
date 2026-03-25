@@ -1,105 +1,58 @@
-import OneSignal from "react-onesignal";
+const brrrWebhookUrl = import.meta.env.VITE_BRRR_WEBHOOK_URL as string | undefined;
+const lastSentHourKey = "brrr_last_sent_hour";
+const reminderMessage = "Bebe Agua cojones";
 
-const appId = import.meta.env.VITE_ONESIGNAL_APP_ID as string | undefined;
-const safariWebId = import.meta.env.VITE_ONESIGNAL_SAFARI_WEB_ID as string | undefined;
-
-type PushAvailability = "ready" | "unsupported" | "blocked" | "unconfigured";
-
-let initPromise: Promise<boolean> | null = null;
-
-function isNotificationApiAvailable() {
-  return typeof window !== "undefined" && "Notification" in window;
+function canUseStorage(): boolean {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
 
-function isBlockedByClientError(error: unknown) {
-  if (!error) return false;
-  const message = String(error);
-  return message.includes("ERR_BLOCKED_BY_CLIENT");
+function formatHourKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  const h = String(date.getHours()).padStart(2, "0");
+  return `${y}-${m}-${d}-${h}`;
 }
 
-export function hasPushConfig() {
-  return Boolean(appId);
+function isWithinWindow(now: Date, wakeHour: number, sleepHour: number): boolean {
+  const hour = now.getHours();
+
+  if (wakeHour === sleepHour) return true;
+  if (wakeHour < sleepHour) return hour >= wakeHour && hour < sleepHour;
+
+  return hour >= wakeHour || hour < sleepHour;
 }
 
-export function getPushAvailability(): PushAvailability {
-  if (!hasPushConfig()) return "unconfigured";
-  if (!isNotificationApiAvailable()) return "unsupported";
-  return "ready";
+export function hasPushConfig(): boolean {
+  return Boolean(brrrWebhookUrl);
 }
 
-export async function initPush() {
-  if (getPushAvailability() !== "ready") return false;
+export async function sendBrrrNotification(message: string): Promise<boolean> {
+  if (!brrrWebhookUrl) return false;
 
-  if (!initPromise) {
-    const initOptions = {
-      appId: appId!,
-      serviceWorkerPath: "onesignal/OneSignalSDKWorker.js",
-      allowLocalhostAsSecureOrigin: true,
-      ...(safariWebId ? { safari_web_id: safariWebId } : {})
-    };
+  const response = await fetch(brrrWebhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+    body: message
+  });
 
-    initPromise = OneSignal.init(initOptions)
-      .then(() => true)
-      .catch((error) => {
-        if (isBlockedByClientError(error)) {
-          return false;
-        }
-        console.error("No se pudo inicializar OneSignal", error);
-        return false;
-      });
-  }
-
-  return initPromise;
+  return response.ok;
 }
 
-export async function getPushStatus() {
-  const availability = getPushAvailability();
+export async function sendHourlyReminderIfNeeded(
+  wakeHour: number,
+  sleepHour: number,
+  now: Date = new Date()
+): Promise<boolean> {
+  if (!hasPushConfig()) return false;
+  if (!canUseStorage()) return false;
+  if (!isWithinWindow(now, wakeHour, sleepHour)) return false;
 
-  if (availability !== "ready") {
-    return {
-      configured: availability !== "unconfigured",
-      available: false,
-      subscribed: false,
-      permission: "default" as NotificationPermission,
-      blockedByClient: false
-    };
-  }
+  const hourKey = formatHourKey(now);
+  if (window.localStorage.getItem(lastSentHourKey) === hourKey) return false;
 
-  const ready = await initPush();
-  if (!ready) {
-    return {
-      configured: true,
-      available: false,
-      subscribed: false,
-      permission: Notification.permission,
-      blockedByClient: true
-    };
-  }
+  const sent = await sendBrrrNotification(reminderMessage);
+  if (sent) window.localStorage.setItem(lastSentHourKey, hourKey);
 
-  const subscribed = OneSignal.User.PushSubscription.optedIn ?? false;
-
-  return {
-    configured: true,
-    available: true,
-    subscribed,
-    permission: Notification.permission,
-    blockedByClient: false
-  };
-}
-
-export async function subscribeToPush() {
-  const ready = await initPush();
-  if (!ready) return false;
-
-  await OneSignal.Notifications.requestPermission();
-  await OneSignal.User.PushSubscription.optIn();
-  return OneSignal.User.PushSubscription.optedIn ?? false;
-}
-
-export async function unsubscribeFromPush() {
-  const ready = await initPush();
-  if (!ready) return false;
-
-  await OneSignal.User.PushSubscription.optOut();
-  return OneSignal.User.PushSubscription.optedIn ?? false;
+  return sent;
 }

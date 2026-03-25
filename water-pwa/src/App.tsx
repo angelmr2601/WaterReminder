@@ -6,6 +6,7 @@ import { startOfDayMs, endOfDayMs } from "./time";
 import { SettingsView } from "./SettingsView";
 import { expectedByNowMl, pacingStatus, nextHourGuidance } from "./pacing";
 import { StatsView } from "./StatsView";
+import { sendHourlyReminderIfNeeded } from "./notifications";
 
 import {
   Settings as SettingsIcon,
@@ -185,6 +186,11 @@ export default function App() {
   }
 
   // Cerrar modal: tecla ESC (ajustes)
+  useEffect(() => {
+    if (!settings) return;
+    void sendHourlyReminderIfNeeded(settings.wakeHour, settings.sleepHour, now);
+  }, [settings, now]);
+
   useEffect(() => {
     if (!showSettings) return;
     const onKey = (e: KeyboardEvent) => {

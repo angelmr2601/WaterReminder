@@ -4,52 +4,21 @@ import type { Settings } from "./db";
 import {
   Target,
   Clock,
-  Timer,
   Zap,
   Save,
   Droplets,
-  Bell,
-  Smartphone
+  Bell
 } from "lucide-react";
-import {
-  getPushAvailability,
-  getPushStatus,
-  hasPushConfig,
-  subscribeToPush,
-  unsubscribeFromPush
-} from "./notifications";
-
-const initialAvailability = hasPushConfig() ? getPushAvailability() : "unconfigured";
+import { hasPushConfig } from "./notifications";
 
 export function SettingsView() {
   const [s, setS] = useState<Settings | null>(null);
   const [quickInput, setQuickInput] = useState("");
   const [savedPing, setSavedPing] = useState(false);
-  const [pushReady, setPushReady] = useState(initialAvailability === "ready");
-  const [pushError, setPushError] = useState<string | null>(
-    initialAvailability === "unsupported" ? "Este navegador no soporta notificaciones push web." : null
-  );
-  const [pushSubscribed, setPushSubscribed] = useState(false);
-  const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
-  const [pushBusy, setPushBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
       setS((await db.settings.get("me")) ?? null);
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (!hasPushConfig() || initialAvailability !== "ready") return;
-
-    (async () => {
-      const status = await getPushStatus();
-      setPushReady(status.available);
-      setPushSubscribed(status.subscribed);
-      setPushPermission(status.permission);
-      if (status.blockedByClient) {
-        setPushError("OneSignal fue bloqueado por Safari o por un bloqueador de contenido.");
-      }
     })();
   }, []);
 
@@ -108,68 +77,12 @@ export function SettingsView() {
 
         {!hasPushConfig() ? (
           <div style={{ fontSize: 14, opacity: 0.75 }}>
-            Configura <code>VITE_ONESIGNAL_APP_ID</code> (y en Safari también <code>VITE_ONESIGNAL_SAFARI_WEB_ID</code>) en tu <code>.env</code>.
+            Configura <code>VITE_BRRR_WEBHOOK_URL</code> en tu <code>.env</code> para enviar notificaciones (solo BRRR).
           </div>
         ) : (
-          <>
-            <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 8 }}>
-              Estado: {pushSubscribed ? "suscrito" : "no suscrito"} · Permiso: {pushPermission}
-            </div>
-
-            {pushError && (
-              <div style={{ fontSize: 12, color: "#a33", marginBottom: 10 }}>
-                {pushError}
-              </div>
-            )}
-
-            <button
-              onClick={async () => {
-                setPushBusy(true);
-                setPushError(null);
-
-                if (!pushReady) {
-                  const status = await getPushStatus();
-                  setPushReady(status.available);
-                  setPushPermission(status.permission);
-                  if (!status.available) {
-                    setPushError(
-                      status.blockedByClient
-                        ? "OneSignal está bloqueado por el navegador o un bloqueador de anuncios/contenido."
-                        : "No se puede activar push en este navegador."
-                    );
-                    setPushBusy(false);
-                    return;
-                  }
-                }
-
-                if (pushSubscribed) {
-                  const stillSubscribed = await unsubscribeFromPush();
-                  setPushSubscribed(stillSubscribed);
-                } else {
-                  const nowSubscribed = await subscribeToPush();
-                  setPushSubscribed(nowSubscribed);
-                  setPushPermission(Notification.permission);
-                }
-
-                setPushBusy(false);
-              }}
-              disabled={pushBusy}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "12px 12px",
-                borderRadius: 12,
-                border: "1px solid #e5e5e5",
-                background: pushSubscribed ? "#fff" : "#111",
-                color: pushSubscribed ? "#111" : "#fff",
-                fontWeight: 700
-              }}
-            >
-              <Smartphone size={16} />
-              {pushBusy ? "Conectando..." : pushSubscribed ? "Desactivar avisos" : pushReady ? "Activar avisos" : "Reintentar conexión"}
-            </button>
-          </>
+          <div style={{ fontSize: 13, opacity: 0.75 }}>
+            Se enviará una notificación cada hora por BRRR, entre la hora de inicio y fin configuradas abajo.
+          </div>
         )}
       </section>
 
@@ -233,27 +146,6 @@ export function SettingsView() {
             />
           </label>
         </div>
-      </section>
-
-      {/* Intervalo */}
-      <section style={{ marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, marginBottom: 10 }}>
-          <Timer size={18} />
-          Intervalo
-        </div>
-
-        <label style={{ display: "block" }}>
-          <span style={labelStyle}>Cada cuántos minutos (min)</span>
-          <input
-            type="number"
-            min={15}
-            step={5}
-            value={s.stepMinutes}
-            onChange={(e) => save({ stepMinutes: Number(e.target.value) })}
-            style={inputStyle}
-            inputMode="numeric"
-          />
-        </label>
       </section>
 
       {/* Botones rápidos */}
