@@ -4,12 +4,10 @@ import type { Settings } from "./db";
 import {
   Target,
   Clock,
-  Timer,
   Zap,
   Save,
   Droplets,
-  Bell,
-  Smartphone
+  Bell
 } from "lucide-react";
 import {
   getPushAvailability,
@@ -277,27 +275,6 @@ export function SettingsView() {
             />
           </label>
         </div>
-      </section>
-
-      {/* Intervalo */}
-      <section style={{ marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, marginBottom: 10 }}>
-          <Timer size={18} />
-          Intervalo
-        </div>
-
-        <label style={{ display: "block" }}>
-          <span style={labelStyle}>Cada cuántos minutos (min)</span>
-          <input
-            type="number"
-            min={15}
-            step={5}
-            value={s.stepMinutes}
-            onChange={(e) => save({ stepMinutes: Number(e.target.value) })}
-            style={inputStyle}
-            inputMode="numeric"
-          />
-        </label>
       </section>
 
       {/* Botones rápidos */}

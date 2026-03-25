@@ -1,4 +1,5 @@
-import OneSignal from "react-onesignal";
+const brrrWebhookUrl = import.meta.env.VITE_BRRR_WEBHOOK_URL as string | undefined;
+const lastSentHourKey = "brrr_last_sent_hour";
 
 const appId = import.meta.env.VITE_ONESIGNAL_APP_ID as string | undefined;
 const safariWebId = import.meta.env.VITE_ONESIGNAL_SAFARI_WEB_ID as string | undefined;
@@ -8,16 +9,13 @@ type PushAvailability = "ready" | "unsupported" | "blocked" | "unconfigured";
 type PushProvider = "onesignal" | "brrr" | "none";
 const brrrEnabledKey = "brrr_push_enabled";
 
-let initPromise: Promise<boolean> | null = null;
+  if (wakeHour === sleepHour) return true;
 
-function isNotificationApiAvailable() {
-  return typeof window !== "undefined" && "Notification" in window;
-}
+  if (wakeHour < sleepHour) {
+    return hour >= wakeHour && hour < sleepHour;
+  }
 
-function isBlockedByClientError(error: unknown) {
-  if (!error) return false;
-  const message = String(error);
-  return message.includes("ERR_BLOCKED_BY_CLIENT");
+  return hour >= wakeHour || hour < sleepHour;
 }
 
 export function hasPushConfig() {
@@ -60,18 +58,15 @@ export async function initPush() {
       ...(safariWebId ? { safari_web_id: safariWebId } : {})
     };
 
-    initPromise = OneSignal.init(initOptions)
-      .then(() => true)
-      .catch((error) => {
-        if (isBlockedByClientError(error)) {
-          return false;
-        }
-        console.error("No se pudo inicializar OneSignal", error);
-        return false;
-      });
-  }
+  const response = await fetch(brrrWebhookUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8"
+    },
+    body: message
+  });
 
-  return initPromise;
+  return response.ok;
 }
 
 export async function getPushStatus() {
