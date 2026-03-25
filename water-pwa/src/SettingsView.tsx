@@ -7,28 +7,59 @@ import {
   Zap,
   Save,
   Droplets,
-  Bell
+  Bell,
+  Smartphone
 } from "lucide-react";
-import { hasPushConfig } from "./notifications";
+import {
+  getPushAvailability,
+  getPushProvider,
+  getPushStatus,
+  hasPushConfig,
+  sendBrrrTestNotification,
+  subscribeToPush,
+  unsubscribeFromPush
+} from "./notifications";
+
+const initialAvailability = hasPushConfig() ? getPushAvailability() : "unconfigured";
 
 export function SettingsView() {
   const [s, setS] = useState<Settings | null>(null);
   const [quickInput, setQuickInput] = useState("");
   const [savedPing, setSavedPing] = useState(false);
 
+  const [pushReady, setPushReady] = useState(initialAvailability === "ready");
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushProvider, setPushProvider] = useState(getPushProvider());
+  const [pushTestBusy, setPushTestBusy] = useState(false);
+  const [pushTestResult, setPushTestResult] = useState<string | null>(null);
+
   useEffect(() => {
     (async () => {
-      setS((await db.settings.get("me")) ?? null);
+      const settings = await db.settings.get("me");
+      setS(settings ?? null);
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!hasPushConfig()) return;
+
+    (async () => {
+      const status = await getPushStatus();
+      setPushProvider(status.provider);
+      setPushReady(status.available);
+      setPushSubscribed(status.subscribed);
     })();
   }, []);
 
   async function save(patch: Partial<Settings>) {
     if (!s) return;
+
     const next = { ...s, ...patch };
     setS(next);
     await db.settings.put(next);
 
-    // mini feedback visual
     setSavedPing(true);
     window.setTimeout(() => setSavedPing(false), 800);
   }
@@ -45,6 +76,7 @@ export function SettingsView() {
       .map((n) => Math.round(n));
 
     if (nums.length === 0) return null;
+
     return Array.from(new Set(nums)).sort((a, b) => a - b);
   }
 
@@ -77,16 +109,129 @@ export function SettingsView() {
 
         {!hasPushConfig() ? (
           <div style={{ fontSize: 14, opacity: 0.75 }}>
-            Configura <code>VITE_BRRR_WEBHOOK_URL</code> en tu <code>.env</code> para enviar notificaciones (solo BRRR).
+            Configura <code>VITE_BRRR_WEBHOOK_URL</code> en tu <code>.env</code>.
           </div>
         ) : (
-          <div style={{ fontSize: 13, opacity: 0.75 }}>
-            Se enviará una notificación cada hora por BRRR, entre la hora de inicio y fin configuradas abajo.
-          </div>
+          <>
+            <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 8 }}>
+              Proveedor: {pushProvider} · Estado: {pushSubscribed ? "activo" : "inactivo"}
+            </div>
+
+            {pushError && (
+              <div style={{ fontSize: 12, color: "#a33", marginBottom: 10 }}>
+                {pushError}
+              </div>
+            )}
+
+            <button
+              onClick={async () => {
+                setPushBusy(true);
+                setPushError(null);
+                setPushTestResult(null);
+
+                try {
+                  const status = await getPushStatus();
+                  setPushProvider(status.provider);
+                  setPushReady(status.available);
+
+                  if (!status.available) {
+                    setPushError("No se pudo conectar con BRRR.");
+                    return;
+                  }
+
+                  if (pushSubscribed) {
+                    const ok = await unsubscribeFromPush();
+                    setPushSubscribed(!ok ? pushSubscribed : false);
+
+                    if (!ok) {
+                      setPushError("No se pudieron desactivar los avisos.");
+                    }
+                  } else {
+                    const ok = await subscribeToPush();
+                    setPushSubscribed(ok);
+
+                    if (!ok) {
+                      setPushError("No se pudieron activar los avisos.");
+                    }
+                  }
+                } catch (error) {
+                  console.error("Error cambiando estado de BRRR:", error);
+                  setPushError("Ha ocurrido un error al cambiar el estado de las notificaciones.");
+                } finally {
+                  setPushBusy(false);
+                }
+              }}
+              disabled={pushBusy}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "12px 12px",
+                borderRadius: 12,
+                border: "1px solid #e5e5e5",
+                background: pushSubscribed ? "#fff" : "#111",
+                color: pushSubscribed ? "#111" : "#fff",
+                fontWeight: 700
+              }}
+            >
+              <Smartphone size={16} />
+              {pushBusy
+                ? "Conectando..."
+                : pushSubscribed
+                  ? "Desactivar avisos"
+                  : pushReady
+                    ? "Activar avisos"
+                    : "Reintentar conexión"}
+            </button>
+
+            {pushProvider === "brrr" && pushSubscribed && (
+              <div style={{ marginTop: 8 }}>
+                <button
+                  onClick={async () => {
+                    setPushTestBusy(true);
+                    setPushTestResult(null);
+
+                    try {
+                      const ok = await sendBrrrTestNotification("Bebe Agua cojones");
+                      setPushTestResult(
+                        ok
+                          ? 'Notificación de prueba enviada a BRRR: "Bebe Agua cojones".'
+                          : "No se pudo enviar la prueba. Revisa tu webhook de BRRR."
+                      );
+                    } catch (error) {
+                      console.error("Error enviando prueba BRRR:", error);
+                      setPushTestResult("Error enviando la prueba a BRRR.");
+                    } finally {
+                      setPushTestBusy(false);
+                    }
+                  }}
+                  disabled={pushTestBusy}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    border: "1px solid #e5e5e5",
+                    background: "#fff",
+                    color: "#111",
+                    fontWeight: 600
+                  }}
+                >
+                  {pushTestBusy ? "Enviando..." : "Enviar prueba BRRR"}
+                </button>
+
+                {pushTestResult && (
+                  <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>
+                    {pushTestResult}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </section>
 
-      {/* Objetivo */}
       <section style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, marginBottom: 10 }}>
           <Target size={18} />
@@ -112,7 +257,6 @@ export function SettingsView() {
         </label>
       </section>
 
-      {/* Horario */}
       <section style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, marginBottom: 10 }}>
           <Clock size={18} />
@@ -148,7 +292,6 @@ export function SettingsView() {
         </div>
       </section>
 
-      {/* Botones rápidos */}
       <section style={{ paddingTop: 14, borderTop: "1px solid #eee" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, marginBottom: 10 }}>
           <Zap size={18} />
@@ -166,10 +309,12 @@ export function SettingsView() {
             placeholder={s.quickAmountsMl.join(", ")}
             style={{ ...inputStyle, flex: 1 }}
           />
+
           <button
             onClick={async () => {
               const list = parseQuickList(quickInput);
               if (!list) return;
+
               await save({ quickAmountsMl: list });
               setQuickInput("");
             }}
