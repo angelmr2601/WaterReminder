@@ -2,8 +2,11 @@ import OneSignal from "react-onesignal";
 
 const appId = import.meta.env.VITE_ONESIGNAL_APP_ID as string | undefined;
 const safariWebId = import.meta.env.VITE_ONESIGNAL_SAFARI_WEB_ID as string | undefined;
+const brrrWebhookUrl = import.meta.env.VITE_BRRR_WEBHOOK_URL as string | undefined;
 
 type PushAvailability = "ready" | "unsupported" | "blocked" | "unconfigured";
+type PushProvider = "onesignal" | "brrr" | "none";
+const brrrEnabledKey = "brrr_push_enabled";
 
 let initPromise: Promise<boolean> | null = null;
 
@@ -18,17 +21,36 @@ function isBlockedByClientError(error: unknown) {
 }
 
 export function hasPushConfig() {
-  return Boolean(appId);
+  return Boolean(appId || brrrWebhookUrl);
+}
+
+export function getPushProvider(): PushProvider {
+  if (brrrWebhookUrl) return "brrr";
+  if (appId) return "onesignal";
+  return "none";
+}
+
+function isBrrrEnabled() {
+  if (typeof window === "undefined") return true;
+  const value = window.localStorage.getItem(brrrEnabledKey);
+  return value !== "false";
+}
+
+function setBrrrEnabled(enabled: boolean) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(brrrEnabledKey, enabled ? "true" : "false");
 }
 
 export function getPushAvailability(): PushAvailability {
   if (!hasPushConfig()) return "unconfigured";
+  if (getPushProvider() === "brrr") return "ready";
   if (!isNotificationApiAvailable()) return "unsupported";
   return "ready";
 }
 
 export async function initPush() {
   if (getPushAvailability() !== "ready") return false;
+  if (getPushProvider() === "brrr") return true;
 
   if (!initPromise) {
     const initOptions = {
@@ -54,9 +76,11 @@ export async function initPush() {
 
 export async function getPushStatus() {
   const availability = getPushAvailability();
+  const provider = getPushProvider();
 
   if (availability !== "ready") {
     return {
+      provider,
       configured: availability !== "unconfigured",
       available: false,
       subscribed: false,
@@ -65,9 +89,21 @@ export async function getPushStatus() {
     };
   }
 
+  if (provider === "brrr") {
+    return {
+      provider,
+      configured: true,
+      available: true,
+      subscribed: isBrrrEnabled(),
+      permission: "granted" as NotificationPermission,
+      blockedByClient: false
+    };
+  }
+
   const ready = await initPush();
   if (!ready) {
     return {
+      provider,
       configured: true,
       available: false,
       subscribed: false,
@@ -79,6 +115,7 @@ export async function getPushStatus() {
   const subscribed = OneSignal.User.PushSubscription.optedIn ?? false;
 
   return {
+    provider,
     configured: true,
     available: true,
     subscribed,
@@ -88,6 +125,11 @@ export async function getPushStatus() {
 }
 
 export async function subscribeToPush() {
+  if (getPushProvider() === "brrr") {
+    setBrrrEnabled(true);
+    return true;
+  }
+
   const ready = await initPush();
   if (!ready) return false;
 
@@ -97,9 +139,28 @@ export async function subscribeToPush() {
 }
 
 export async function unsubscribeFromPush() {
+  if (getPushProvider() === "brrr") {
+    setBrrrEnabled(false);
+    return false;
+  }
+
   const ready = await initPush();
   if (!ready) return false;
 
   await OneSignal.User.PushSubscription.optOut();
   return OneSignal.User.PushSubscription.optedIn ?? false;
+}
+
+export async function sendBrrrTestNotification(message = "Bebe Agua cojones") {
+  if (!brrrWebhookUrl) return false;
+
+  const response = await fetch(brrrWebhookUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8"
+    },
+    body: message
+  });
+
+  return response.ok;
 }

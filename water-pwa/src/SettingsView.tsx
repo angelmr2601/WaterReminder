@@ -13,8 +13,10 @@ import {
 } from "lucide-react";
 import {
   getPushAvailability,
+  getPushProvider,
   getPushStatus,
   hasPushConfig,
+  sendBrrrTestNotification,
   subscribeToPush,
   unsubscribeFromPush
 } from "./notifications";
@@ -32,6 +34,9 @@ export function SettingsView() {
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
   const [pushBusy, setPushBusy] = useState(false);
+  const [pushProvider, setPushProvider] = useState(getPushProvider());
+  const [pushTestBusy, setPushTestBusy] = useState(false);
+  const [pushTestResult, setPushTestResult] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -44,6 +49,7 @@ export function SettingsView() {
 
     (async () => {
       const status = await getPushStatus();
+      setPushProvider(status.provider);
       setPushReady(status.available);
       setPushSubscribed(status.subscribed);
       setPushPermission(status.permission);
@@ -108,12 +114,12 @@ export function SettingsView() {
 
         {!hasPushConfig() ? (
           <div style={{ fontSize: 14, opacity: 0.75 }}>
-            Configura <code>VITE_ONESIGNAL_APP_ID</code> (y en Safari también <code>VITE_ONESIGNAL_SAFARI_WEB_ID</code>) en tu <code>.env</code>.
+            Configura <code>VITE_BRRR_WEBHOOK_URL</code> (recomendado) o <code>VITE_ONESIGNAL_APP_ID</code> en tu <code>.env</code>.
           </div>
         ) : (
           <>
             <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 8 }}>
-              Estado: {pushSubscribed ? "suscrito" : "no suscrito"} · Permiso: {pushPermission}
+              Proveedor: {pushProvider} · Estado: {pushSubscribed ? "activo" : "inactivo"} · Permiso: {pushPermission}
             </div>
 
             {pushError && (
@@ -129,6 +135,7 @@ export function SettingsView() {
 
                 if (!pushReady) {
                   const status = await getPushStatus();
+                  setPushProvider(status.provider);
                   setPushReady(status.available);
                   setPushPermission(status.permission);
                   if (!status.available) {
@@ -169,6 +176,43 @@ export function SettingsView() {
               <Smartphone size={16} />
               {pushBusy ? "Conectando..." : pushSubscribed ? "Desactivar avisos" : pushReady ? "Activar avisos" : "Reintentar conexión"}
             </button>
+
+            {pushProvider === "brrr" && pushSubscribed && (
+              <div style={{ marginTop: 8 }}>
+                <button
+                  onClick={async () => {
+                    setPushTestBusy(true);
+                    setPushTestResult(null);
+                    const ok = await sendBrrrTestNotification("Bebe Agua cojones");
+                    setPushTestResult(
+                      ok
+                        ? "Notificación de prueba enviada a BRRR: \"Bebe Agua cojones\"."
+                        : "No se pudo enviar la prueba. Revisa tu webhook de BRRR."
+                    );
+                    setPushTestBusy(false);
+                  }}
+                  disabled={pushTestBusy}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    border: "1px solid #e5e5e5",
+                    background: "#fff",
+                    color: "#111",
+                    fontWeight: 600
+                  }}
+                >
+                  {pushTestBusy ? "Enviando..." : "Enviar prueba BRRR"}
+                </button>
+                {pushTestResult && (
+                  <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>
+                    {pushTestResult}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </section>
