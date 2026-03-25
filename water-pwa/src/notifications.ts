@@ -50,13 +50,7 @@ export async function initPush() {
   if (getPushAvailability() !== "ready") return false;
   if (getPushProvider() === "brrr") return true;
 
-  if (!initPromise) {
-    const initOptions = {
-      appId: appId!,
-      serviceWorkerPath: "onesignal/OneSignalSDKWorker.js",
-      allowLocalhostAsSecureOrigin: true,
-      ...(safariWebId ? { safari_web_id: safariWebId } : {})
-    };
+  if (wakeHour === sleepHour) return true;
 
   const response = await fetch(brrrWebhookUrl, {
     method: "POST",
@@ -128,10 +122,9 @@ export async function subscribeToPush() {
   const ready = await initPush();
   if (!ready) return false;
 
-  await OneSignal.Notifications.requestPermission();
-  await OneSignal.User.PushSubscription.optIn();
-  return OneSignal.User.PushSubscription.optedIn ?? false;
-}
+  const hourKey = formatHourKey(now);
+  const alreadySent = window.localStorage.getItem(lastSentHourKey) === hourKey;
+  if (alreadySent) return false;
 
 export async function unsubscribeFromPush() {
   if (getPushProvider() === "brrr") {
@@ -142,8 +135,7 @@ export async function unsubscribeFromPush() {
   const ready = await initPush();
   if (!ready) return false;
 
-  await OneSignal.User.PushSubscription.optOut();
-  return OneSignal.User.PushSubscription.optedIn ?? false;
+  return ok;
 }
 
 export async function sendBrrrTestNotification(message = "Bebe Agua cojones") {
