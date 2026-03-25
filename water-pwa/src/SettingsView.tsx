@@ -9,16 +9,51 @@ import {
   Droplets,
   Bell
 } from "lucide-react";
-import { hasPushConfig } from "./notifications";
+import {
+  getPushAvailability,
+  getPushProvider,
+  getPushStatus,
+  hasPushConfig,
+  sendBrrrTestNotification,
+  subscribeToPush,
+  unsubscribeFromPush
+} from "./notifications";
+
+const initialAvailability = hasPushConfig() ? getPushAvailability() : "unconfigured";
 
 export function SettingsView() {
   const [s, setS] = useState<Settings | null>(null);
   const [quickInput, setQuickInput] = useState("");
   const [savedPing, setSavedPing] = useState(false);
+  const [pushReady, setPushReady] = useState(initialAvailability === "ready");
+  const [pushError, setPushError] = useState<string | null>(
+    initialAvailability === "unsupported" ? "Este navegador no soporta notificaciones push web." : null
+  );
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushProvider, setPushProvider] = useState(getPushProvider());
+  const [pushTestBusy, setPushTestBusy] = useState(false);
+  const [pushTestResult, setPushTestResult] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       setS((await db.settings.get("me")) ?? null);
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!hasPushConfig() || initialAvailability !== "ready") return;
+
+    (async () => {
+      const status = await getPushStatus();
+      setPushProvider(status.provider);
+      setPushReady(status.available);
+      setPushSubscribed(status.subscribed);
+      setPushPermission(status.permission);
+      if (status.blockedByClient) {
+        setPushError("OneSignal fue bloqueado por Safari o por un bloqueador de contenido.");
+      }
     })();
   }, []);
 
@@ -77,12 +112,106 @@ export function SettingsView() {
 
         {!hasPushConfig() ? (
           <div style={{ fontSize: 14, opacity: 0.75 }}>
-            Configura <code>VITE_BRRR_WEBHOOK_URL</code> en tu <code>.env</code> para enviar notificaciones (solo BRRR).
+            Configura <code>VITE_BRRR_WEBHOOK_URL</code> (recomendado) o <code>VITE_ONESIGNAL_APP_ID</code> en tu <code>.env</code>.
           </div>
         ) : (
-          <div style={{ fontSize: 13, opacity: 0.75 }}>
-            Se enviará una notificación cada hora por BRRR, entre la hora de inicio y fin configuradas abajo.
-          </div>
+          <>
+            <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 8 }}>
+              Proveedor: {pushProvider} · Estado: {pushSubscribed ? "activo" : "inactivo"} · Permiso: {pushPermission}
+            </div>
+
+            {pushError && (
+              <div style={{ fontSize: 12, color: "#a33", marginBottom: 10 }}>
+                {pushError}
+              </div>
+            )}
+
+            <button
+              onClick={async () => {
+                setPushBusy(true);
+                setPushError(null);
+
+                if (!pushReady) {
+                  const status = await getPushStatus();
+                  setPushProvider(status.provider);
+                  setPushReady(status.available);
+                  setPushPermission(status.permission);
+                  if (!status.available) {
+                    setPushError(
+                      status.blockedByClient
+                        ? "OneSignal está bloqueado por el navegador o un bloqueador de anuncios/contenido."
+                        : "No se puede activar push en este navegador."
+                    );
+                    setPushBusy(false);
+                    return;
+                  }
+                }
+
+                if (pushSubscribed) {
+                  const stillSubscribed = await unsubscribeFromPush();
+                  setPushSubscribed(stillSubscribed);
+                } else {
+                  const nowSubscribed = await subscribeToPush();
+                  setPushSubscribed(nowSubscribed);
+                  setPushPermission(Notification.permission);
+                }
+
+                setPushBusy(false);
+              }}
+              disabled={pushBusy}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "12px 12px",
+                borderRadius: 12,
+                border: "1px solid #e5e5e5",
+                background: pushSubscribed ? "#fff" : "#111",
+                color: pushSubscribed ? "#111" : "#fff",
+                fontWeight: 700
+              }}
+            >
+              <Smartphone size={16} />
+              {pushBusy ? "Conectando..." : pushSubscribed ? "Desactivar avisos" : pushReady ? "Activar avisos" : "Reintentar conexión"}
+            </button>
+
+            {pushProvider === "brrr" && pushSubscribed && (
+              <div style={{ marginTop: 8 }}>
+                <button
+                  onClick={async () => {
+                    setPushTestBusy(true);
+                    setPushTestResult(null);
+                    const ok = await sendBrrrTestNotification("Bebe Agua cojones");
+                    setPushTestResult(
+                      ok
+                        ? "Notificación de prueba enviada a BRRR: \"Bebe Agua cojones\"."
+                        : "No se pudo enviar la prueba. Revisa tu webhook de BRRR."
+                    );
+                    setPushTestBusy(false);
+                  }}
+                  disabled={pushTestBusy}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    border: "1px solid #e5e5e5",
+                    background: "#fff",
+                    color: "#111",
+                    fontWeight: 600
+                  }}
+                >
+                  {pushTestBusy ? "Enviando..." : "Enviar prueba BRRR"}
+                </button>
+                {pushTestResult && (
+                  <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>
+                    {pushTestResult}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </section>
 
