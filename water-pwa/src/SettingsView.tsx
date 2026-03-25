@@ -7,7 +7,8 @@ import {
   Zap,
   Save,
   Droplets,
-  Bell
+  Bell,
+  Smartphone
 } from "lucide-react";
 import {
   getPushAvailability,
@@ -25,12 +26,10 @@ export function SettingsView() {
   const [s, setS] = useState<Settings | null>(null);
   const [quickInput, setQuickInput] = useState("");
   const [savedPing, setSavedPing] = useState(false);
+
   const [pushReady, setPushReady] = useState(initialAvailability === "ready");
-  const [pushError, setPushError] = useState<string | null>(
-    initialAvailability === "unsupported" ? "Este navegador no soporta notificaciones push web." : null
-  );
+  const [pushError, setPushError] = useState<string | null>(null);
   const [pushSubscribed, setPushSubscribed] = useState(false);
-  const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
   const [pushBusy, setPushBusy] = useState(false);
   const [pushProvider, setPushProvider] = useState(getPushProvider());
   const [pushTestBusy, setPushTestBusy] = useState(false);
@@ -38,32 +37,29 @@ export function SettingsView() {
 
   useEffect(() => {
     (async () => {
-      setS((await db.settings.get("me")) ?? null);
+      const settings = await db.settings.get("me");
+      setS(settings ?? null);
     })();
   }, []);
 
   useEffect(() => {
-    if (!hasPushConfig() || initialAvailability !== "ready") return;
+    if (!hasPushConfig()) return;
 
     (async () => {
       const status = await getPushStatus();
       setPushProvider(status.provider);
       setPushReady(status.available);
       setPushSubscribed(status.subscribed);
-      setPushPermission(status.permission);
-      if (status.blockedByClient) {
-        setPushError("OneSignal fue bloqueado por Safari o por un bloqueador de contenido.");
-      }
     })();
   }, []);
 
   async function save(patch: Partial<Settings>) {
     if (!s) return;
+
     const next = { ...s, ...patch };
     setS(next);
     await db.settings.put(next);
 
-    // mini feedback visual
     setSavedPing(true);
     window.setTimeout(() => setSavedPing(false), 800);
   }
@@ -80,6 +76,7 @@ export function SettingsView() {
       .map((n) => Math.round(n));
 
     if (nums.length === 0) return null;
+
     return Array.from(new Set(nums)).sort((a, b) => a - b);
   }
 
@@ -112,12 +109,12 @@ export function SettingsView() {
 
         {!hasPushConfig() ? (
           <div style={{ fontSize: 14, opacity: 0.75 }}>
-            Configura <code>VITE_BRRR_WEBHOOK_URL</code> (recomendado) o <code>VITE_ONESIGNAL_APP_ID</code> en tu <code>.env</code>.
+            Configura <code>VITE_BRRR_WEBHOOK_URL</code> en tu <code>.env</code>.
           </div>
         ) : (
           <>
             <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 8 }}>
-              Proveedor: {pushProvider} · Estado: {pushSubscribed ? "activo" : "inactivo"} · Permiso: {pushPermission}
+              Proveedor: {pushProvider} · Estado: {pushSubscribed ? "activo" : "inactivo"}
             </div>
 
             {pushError && (
@@ -130,33 +127,39 @@ export function SettingsView() {
               onClick={async () => {
                 setPushBusy(true);
                 setPushError(null);
+                setPushTestResult(null);
 
-                if (!pushReady) {
+                try {
                   const status = await getPushStatus();
                   setPushProvider(status.provider);
                   setPushReady(status.available);
-                  setPushPermission(status.permission);
+
                   if (!status.available) {
-                    setPushError(
-                      status.blockedByClient
-                        ? "OneSignal está bloqueado por el navegador o un bloqueador de anuncios/contenido."
-                        : "No se puede activar push en este navegador."
-                    );
-                    setPushBusy(false);
+                    setPushError("No se pudo conectar con BRRR.");
                     return;
                   }
-                }
 
-                if (pushSubscribed) {
-                  const stillSubscribed = await unsubscribeFromPush();
-                  setPushSubscribed(stillSubscribed);
-                } else {
-                  const nowSubscribed = await subscribeToPush();
-                  setPushSubscribed(nowSubscribed);
-                  setPushPermission(Notification.permission);
-                }
+                  if (pushSubscribed) {
+                    const ok = await unsubscribeFromPush();
+                    setPushSubscribed(!ok ? pushSubscribed : false);
 
-                setPushBusy(false);
+                    if (!ok) {
+                      setPushError("No se pudieron desactivar los avisos.");
+                    }
+                  } else {
+                    const ok = await subscribeToPush();
+                    setPushSubscribed(ok);
+
+                    if (!ok) {
+                      setPushError("No se pudieron activar los avisos.");
+                    }
+                  }
+                } catch (error) {
+                  console.error("Error cambiando estado de BRRR:", error);
+                  setPushError("Ha ocurrido un error al cambiar el estado de las notificaciones.");
+                } finally {
+                  setPushBusy(false);
+                }
               }}
               disabled={pushBusy}
               style={{
@@ -172,7 +175,13 @@ export function SettingsView() {
               }}
             >
               <Smartphone size={16} />
-              {pushBusy ? "Conectando..." : pushSubscribed ? "Desactivar avisos" : pushReady ? "Activar avisos" : "Reintentar conexión"}
+              {pushBusy
+                ? "Conectando..."
+                : pushSubscribed
+                  ? "Desactivar avisos"
+                  : pushReady
+                    ? "Activar avisos"
+                    : "Reintentar conexión"}
             </button>
 
             {pushProvider === "brrr" && pushSubscribed && (
@@ -181,13 +190,20 @@ export function SettingsView() {
                   onClick={async () => {
                     setPushTestBusy(true);
                     setPushTestResult(null);
-                    const ok = await sendBrrrTestNotification("Bebe Agua cojones");
-                    setPushTestResult(
-                      ok
-                        ? "Notificación de prueba enviada a BRRR: \"Bebe Agua cojones\"."
-                        : "No se pudo enviar la prueba. Revisa tu webhook de BRRR."
-                    );
-                    setPushTestBusy(false);
+
+                    try {
+                      const ok = await sendBrrrTestNotification("Bebe Agua cojones");
+                      setPushTestResult(
+                        ok
+                          ? 'Notificación de prueba enviada a BRRR: "Bebe Agua cojones".'
+                          : "No se pudo enviar la prueba. Revisa tu webhook de BRRR."
+                      );
+                    } catch (error) {
+                      console.error("Error enviando prueba BRRR:", error);
+                      setPushTestResult("Error enviando la prueba a BRRR.");
+                    } finally {
+                      setPushTestBusy(false);
+                    }
                   }}
                   disabled={pushTestBusy}
                   style={{
@@ -204,6 +220,7 @@ export function SettingsView() {
                 >
                   {pushTestBusy ? "Enviando..." : "Enviar prueba BRRR"}
                 </button>
+
                 {pushTestResult && (
                   <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>
                     {pushTestResult}
@@ -215,7 +232,6 @@ export function SettingsView() {
         )}
       </section>
 
-      {/* Objetivo */}
       <section style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, marginBottom: 10 }}>
           <Target size={18} />
@@ -241,7 +257,6 @@ export function SettingsView() {
         </label>
       </section>
 
-      {/* Horario */}
       <section style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, marginBottom: 10 }}>
           <Clock size={18} />
@@ -277,7 +292,6 @@ export function SettingsView() {
         </div>
       </section>
 
-      {/* Botones rápidos */}
       <section style={{ paddingTop: 14, borderTop: "1px solid #eee" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, marginBottom: 10 }}>
           <Zap size={18} />
@@ -295,10 +309,12 @@ export function SettingsView() {
             placeholder={s.quickAmountsMl.join(", ")}
             style={{ ...inputStyle, flex: 1 }}
           />
+
           <button
             onClick={async () => {
               const list = parseQuickList(quickInput);
               if (!list) return;
+
               await save({ quickAmountsMl: list });
               setQuickInput("");
             }}
