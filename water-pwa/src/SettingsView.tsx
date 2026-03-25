@@ -77,11 +77,11 @@ export function SettingsView() {
 
         {!hasPushConfig() ? (
           <div style={{ fontSize: 14, opacity: 0.75 }}>
-            Configura <code>VITE_BRRR_WEBHOOK_URL</code> en tu <code>.env</code> para enviar notificaciones.
+            Configura <code>VITE_BRRR_WEBHOOK_URL</code> en tu <code>.env</code> para enviar notificaciones (solo BRRR).
           </div>
         ) : (
           <div style={{ fontSize: 13, opacity: 0.75 }}>
-            Se enviará una notificación cada hora, entre la hora de inicio y fin configuradas abajo.
+            Se enviará una notificación cada hora por BRRR, entre la hora de inicio y fin configuradas abajo.
           </div>
         )}
       </section>
